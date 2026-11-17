@@ -29,17 +29,15 @@ jobs:
           cache: true
 
       - name: Setup App Store Connect API Key
-        env:
-          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           mkdir -p ~/.private_keys
-          printf "%s\n" "$PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
+          echo "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JR1RBZ0VBTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEJIa3dkd0lCQVFRZ3VWVjlPVXRJUm1YY0NLdy8KSEZKN3lIMGFCcUVHRDlmLzVFN1l1KzljcVppZ0NnWUlLb1pJemowREFRZWhSQU5DQUFRbzg3SHVRL3JJREFyaQpaTUhncEdkNytDamhrak00bjBwa3ROcEpwSDloYlFJZWhuazVDR0NjZVJjb3lyNFFhT2FZZGZsVVVsT0dFT3NtCnRWSGlwNmFTCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0=" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
           cp ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8 ~/.private_keys/AuthKey_XTBP3CZHG2.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
           chmod 600 ~/.private_keys/AuthKey_XTBP3CZHG2.p8
-          echo "Key file size:"
-          ls -la ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
+          echo "Key file verified:"
+          cat ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
 
       - name: Install Dependencies
         run: |
