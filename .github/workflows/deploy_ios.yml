@@ -63,7 +63,6 @@ jobs:
             -authenticationKeyID XTBP3CZHG2 \
             -authenticationKeyIssuerID b9388deb-82d3-4a64-89c1-e6c208202239 \
             DEVELOPMENT_TEAM=5HHUXJMAD7 \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             CODE_SIGN_STYLE=Automatic
 
       - name: Export IPA
