@@ -30,17 +30,16 @@ jobs:
 
       - name: Setup App Store Connect API Key
         env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           mkdir -p ~/.private_keys
-          echo "$PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
-          cp ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 ~/.private_keys/AuthKey_${KEY_ID}.p8
-          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
-          chmod 600 ~/.private_keys/AuthKey_${KEY_ID}.p8
-          echo "App Store Connect API key staged successfully."
+          printf "%s\n" "$PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
+          cp ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8 ~/.private_keys/AuthKey_XTBP3CZHG2.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
+          chmod 600 ~/.private_keys/AuthKey_XTBP3CZHG2.p8
+          echo "Key file size:"
+          ls -la ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8
 
       - name: Install Dependencies
         run: |
@@ -54,9 +53,6 @@ jobs:
           flutter build ios --release --no-codesign
 
       - name: Archive with Xcode & App Store Connect API Key
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild archive \
             -workspace ios/Runner.xcworkspace \
@@ -64,23 +60,20 @@ jobs:
             -configuration Release \
             -archivePath build/ios/archive/Runner.xcarchive \
             -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8 \
+            -authenticationKeyID XTBP3CZHG2 \
+            -authenticationKeyIssuerID b9388deb-82d3-4a64-89c1-e6c208202239
 
       - name: Export IPA
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           xcodebuild -exportArchive \
             -archivePath build/ios/archive/Runner.xcarchive \
             -exportPath build/ios/ipa \
             -exportOptionsPlist ios/ExportOptions.plist \
             -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8 \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER_ID"
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_XTBP3CZHG2.p8 \
+            -authenticationKeyID XTBP3CZHG2 \
+            -authenticationKeyIssuerID b9388deb-82d3-4a64-89c1-e6c208202239
 
       - name: Upload IPA Artifact to GitHub
         uses: actions/upload-artifact@v4
@@ -90,15 +83,12 @@ jobs:
           retention-days: 14
 
       - name: Upload to App Store Connect & TestFlight
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           IPA_PATH=$(ls build/ios/ipa/*.ipa | head -n 1)
           echo "Uploading $IPA_PATH to App Store Connect..."
           xcrun altool --upload-app \
             --type ios \
             -f "$IPA_PATH" \
-            --apiKey "$KEY_ID" \
-            --apiIssuer "$ISSUER_ID"
+            --apiKey XTBP3CZHG2 \
+            --apiIssuer b9388deb-82d3-4a64-89c1-e6c208202239
           echo "Successfully uploaded to App Store Connect!"
