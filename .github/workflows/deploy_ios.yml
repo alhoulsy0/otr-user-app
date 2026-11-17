@@ -91,12 +91,7 @@ jobs:
             -scheme Runner \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath build/ios/archive/Runner.xcarchive \
-            DEVELOPMENT_TEAM=5HHUXJMAD7 \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE="b4b758bc-54a2-4a77-9599-55d2119e9603" \
-            PROVISIONING_PROFILE_SPECIFIER="OTR Supermarket AppStore Distribution"
+            -archivePath build/ios/archive/Runner.xcarchive
 
       - name: Export IPA
         run: |
