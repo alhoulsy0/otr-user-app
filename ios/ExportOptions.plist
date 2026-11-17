@@ -13,6 +13,13 @@
     <key>uploadSymbols</key>
     <true/>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>signingCertificate</key>
+    <string>Apple Distribution</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.otrsupermarket.user</key>
+        <string>OTR Supermarket AppStore Distribution</string>
+    </dict>
 </dict>
 </plist>
