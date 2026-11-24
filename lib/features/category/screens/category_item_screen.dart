@@ -215,19 +215,24 @@ class CategoryItemScreenState extends State<CategoryItemScreen> {
       ]);
     }
 
-    return CustomScrollView(
-      controller: _scrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: <Widget>[
-        if (controller.isSearching)
-          SliverToBoxAdapter(child: searchBar)
-        else ...[
-          if (showSubCategoryBar)
-            SliverToBoxAdapter(child: subCategoryBar),
+    return RefreshIndicator(
+      onRefresh: () async {
+        await controller.getCategoryItemList(_resolveCategoryId(controller), 1, controller.type, true);
+      },
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: <Widget>[
+          if (controller.isSearching)
+            SliverToBoxAdapter(child: searchBar)
+          else ...[
+            if (showSubCategoryBar)
+              SliverToBoxAdapter(child: subCategoryBar),
+          ],
+          SliverToBoxAdapter(child: body),
+          SliverToBoxAdapter(child: paginationLoader),
         ],
-        SliverToBoxAdapter(child: body),
-        SliverToBoxAdapter(child: paginationLoader),
-      ],
+      ),
     );
   }
 
