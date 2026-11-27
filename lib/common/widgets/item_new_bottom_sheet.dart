@@ -33,6 +33,7 @@ import 'package:sixam_mart/helper/date_converter.dart';
 import 'package:sixam_mart/helper/price_converter.dart';
 import 'package:sixam_mart/helper/responsive_helper.dart';
 import 'package:sixam_mart/helper/route_helper.dart';
+import 'package:sixam_mart/util/app_constants.dart';
 import 'package:sixam_mart/util/dimensions.dart';
 import 'package:sixam_mart/util/images.dart';
 import 'package:sixam_mart/util/styles.dart';
@@ -56,6 +57,8 @@ class ItemNewBottomSheet extends StatefulWidget {
 
 class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
   bool _newVariation = false;
+  bool _isLoadingDetails = true;
+  bool _loadFailed = false;
   int? _highlightedVariationIndex;
   final Map<int, GlobalKey> _variationCardKeys = {};
   Timer? _highlightTimer;
@@ -109,13 +112,49 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
       }
     }
 
-    itemController.getItemDetails(itemId: widget.itemId, cart: widget.cart, isCampaign: widget.isCampaign).then((_) {
-      if (!mounted) return;
-      final item = itemController.item;
-      if (item == null) return;
-      _newVariation = splashController.getModuleConfig(item.moduleType).newVariation ?? false;
-    });
+    _loadItemDetails(notifyStart: false);
+  }
 
+  bool _resolveNewVariation(SplashController splashController, Item item) {
+    if (item.moduleType == null) return false;
+    try {
+      return splashController.getModuleConfig(item.moduleType).newVariation ?? false;
+    } catch (_) {
+      return item.moduleType == AppConstants.food;
+    }
+  }
+
+  Future<void> _loadItemDetails({bool notifyStart = true}) async {
+    final ItemController itemController = Get.find<ItemController>();
+    final SplashController splashController = Get.find<SplashController>();
+    if (notifyStart && mounted) {
+      setState(() {
+        _isLoadingDetails = true;
+        _loadFailed = false;
+      });
+    }
+    try {
+      await itemController.getItemDetails(
+        itemId: widget.itemId,
+        cart: widget.cart,
+        isCampaign: widget.isCampaign,
+      );
+      if (!mounted) return;
+      final Item? loaded = itemController.item;
+      setState(() {
+        _isLoadingDetails = false;
+        _loadFailed = loaded == null;
+        if (loaded != null) {
+          _newVariation = _resolveNewVariation(splashController, loaded);
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingDetails = false;
+        _loadFailed = true;
+      });
+    }
   }
 
   @override
@@ -193,39 +232,45 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
         
         Item? item = itemController.item;
         
-        if(itemController.item == null){
-          return const ItemBottomSheetShimmer();
+        if (item == null) {
+          if (_isLoadingDetails && !_loadFailed) {
+            return const ItemBottomSheetShimmer();
+          }
+          return _buildLoadErrorState(context);
         }
 
-        _scheduleGuidedFocusCheck(itemController.item!, itemController);
+        _newVariation = _resolveNewVariation(Get.find<SplashController>(), item);
+        _scheduleGuidedFocusCheck(item, itemController);
 
-        double? startingPrice;
+        double? startingPrice = item.price;
         double? endingPrice;
-        if (item!.choiceOptions!.isNotEmpty && item.foodVariations!.isEmpty && !_newVariation) {
-          List<double?> priceList = [];
-          for (var variation in item.variations!) {
-            priceList.add(variation.price);
+        if ((item.choiceOptions?.isNotEmpty ?? false) &&
+            (item.foodVariations?.isEmpty ?? true) &&
+            !_newVariation &&
+            (item.variations?.isNotEmpty ?? false)) {
+          final List<double> priceList = item.variations!
+              .map((v) => v.price)
+              .whereType<double>()
+              .toList()
+            ..sort();
+          if (priceList.isNotEmpty) {
+            startingPrice = priceList.first;
+            if (priceList.first < priceList.last) {
+              endingPrice = priceList.last;
+            }
           }
-          priceList.sort((a, b) => a!.compareTo(b!));
-          startingPrice = priceList[0];
-          if (priceList[0]! < priceList[priceList.length - 1]!) {
-            endingPrice = priceList[priceList.length - 1];
-          }
-        } else {
-          startingPrice = item.price;
         }
 
         double? price = item.price;
         double variationPrice = 0;
         Variation? variation;
-        double? initialDiscount = item.discount;
-        double? discount = item.discount;
-        String? discountType = item.discountType;
+        final double? unitDiscount = item.discount;
+        final String? discountType = item.discountType;
+        final int qty = itemController.quantity ?? 1;
+        final double? lineDiscount = discountType == 'amount'
+            ? (unitDiscount != null ? unitDiscount * qty : null)
+            : unitDiscount;
         int? stock = item.stock ?? 0;
-
-        if(discountType == 'amount'){
-          discount = discount! * itemController.quantity!;
-        }
 
         if(_newVariation) {
           for(int index = 0; index< item.foodVariations!.length; index++) {
@@ -237,9 +282,10 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
           }
         }else {
           List<String> variationList = [];
-          for (int index = 0; index < item.choiceOptions!.length; index++) {
-            if(itemController.variationIndex != null && itemController.variationIndex!.isNotEmpty && itemController.variationIndex![index] != -1) {
-              variationList.add(item.choiceOptions![index].options![itemController.variationIndex![index]].replaceAll(' ', ''));
+          final List<ChoiceOptions> choiceOptions = item.choiceOptions ?? const [];
+          for (int index = 0; index < choiceOptions.length; index++) {
+            if(itemController.variationIndex != null && itemController.variationIndex!.length > index && itemController.variationIndex![index] != -1) {
+              variationList.add(choiceOptions[index].options![itemController.variationIndex![index]].replaceAll(' ', ''));
             }
           }
           String variationType = '';
@@ -253,33 +299,33 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
             }
           }
 
-          for (Variation variations in item.variations!) {
+          for (Variation variations in (item.variations ?? const [])) {
             if (variations.type == variationType) {
-              price = variations.price;
+              price = variations.price ?? price;
               variation = variations;
-              stock = variations.stock;
+              stock = variations.stock ?? stock;
               break;
             }
           }
         }
 
-        price = price! + variationPrice;
-        double priceWithDiscount = PriceConverter.convertWithDiscount(price, discount, discountType)!;
+        price = (price ?? 0) + variationPrice;
+        double priceWithDiscount = PriceConverter.convertWithDiscount(price, unitDiscount ?? 0, discountType) ?? price;
         double addonsCost = 0;
         List<AddOn> addOnIdList = [];
         List<AddOns> addOnsList = [];
-        for (int index = 0; index < item.addOns!.length; index++) {
-          if (itemController.addOnActiveList[index]) {
-            addonsCost = addonsCost + (item.addOns![index].price! * itemController.addOnQtyList[index]!);
-            addOnIdList.add(AddOn(id: item.addOns![index].id, quantity: itemController.addOnQtyList[index]));
-            addOnsList.add(item.addOns![index]);
+        final List<AddOns> itemAddOns = item.addOns ?? const [];
+        for (int index = 0; index < itemAddOns.length; index++) {
+          if (itemController.addOnActiveList.length > index && itemController.addOnActiveList[index]) {
+            addonsCost = addonsCost + ((itemAddOns[index].price ?? 0) * (itemController.addOnQtyList[index] ?? 1));
+            addOnIdList.add(AddOn(id: itemAddOns[index].id, quantity: itemController.addOnQtyList[index]));
+            addOnsList.add(itemAddOns[index]);
           }
         }
         priceWithDiscount = priceWithDiscount;
         double priceWithDiscountAndAddons = priceWithDiscount + addonsCost;
-        bool isAvailable = (item.availableTimeStarts == null || item.availableTimeEnds == null)
-            ? true
-            : DateConverter.isAvailable(item.availableTimeStarts, item.availableTimeEnds);
+        final bool isTimeAvailable = DateConverter.isAvailable(item.availableTimeStarts, item.availableTimeEnds);
+        final bool isAvailable = (item.status == null || item.status == 1) && isTimeAvailable;
 
         return _buildProductDetailSheet(
           context: context,
@@ -289,8 +335,8 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
           endingPrice: endingPrice,
           price: price,
           priceWithDiscount: priceWithDiscount,
-          initialDiscount: initialDiscount,
-          discount: discount,
+          unitDiscount: unitDiscount,
+          lineDiscount: lineDiscount,
           discountType: discountType,
           stock: stock,
           addonsCost: addonsCost,
@@ -312,8 +358,8 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
     required double? endingPrice,
     required double price,
     required double priceWithDiscount,
-    required double? initialDiscount,
-    required double? discount,
+    required double? unitDiscount,
+    required double? lineDiscount,
     required String? discountType,
     required int? stock,
     required double addonsCost,
@@ -327,10 +373,11 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
     final double maxSheetHeight = screenHeight * (ResponsiveHelper.isDesktop(context) ? 0.88 : 0.94);
     final double expandedHeaderHeight = (screenHeight * 0.30).clamp(240.0, 320.0).toDouble();
     final bool scheduleOrder = item.scheduleOrder ?? false;
-    final bool showPinnedCartBar = !(scheduleOrder == false && !isAvailable);
+    final bool isStatusActive = item.status == null || item.status == 1;
+    final bool showPinnedCartBar = isStatusActive && (isAvailable || scheduleOrder);
 
-    final bool addOnEnabled = Get.find<SplashController>().configModel!.moduleConfig!.module!.addOn!;
-    final bool hasAddons = addOnEnabled && item.addOns!.isNotEmpty;
+    final bool addOnEnabled = Get.find<SplashController>().configModel?.moduleConfig?.module?.addOn ?? false;
+    final bool hasAddons = addOnEnabled && (item.addOns?.isNotEmpty ?? false);
     final bool hasFoodVariations = _newVariation && (item.foodVariations?.isNotEmpty ?? false);
     final bool hasChoiceOptions = !_newVariation && (item.choiceOptions?.isNotEmpty ?? false);
     final bool hasVariations = hasFoodVariations || hasChoiceOptions;
@@ -365,7 +412,7 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
                 color: Theme.of(context).cardColor,
                 padding: const EdgeInsets.fromLTRB(Dimensions.paddingSizeLarge, Dimensions.paddingSizeLarge, Dimensions.paddingSizeLarge, Dimensions.paddingSizeDefault),
                 child: _buildProductSummary(context: context, item: item, startingPrice: startingPrice, endingPrice: endingPrice,
-                  initialDiscount: initialDiscount, discountType: discountType,
+                  initialDiscount: unitDiscount, discountType: discountType,
                 ),
               ),
             ),
@@ -383,8 +430,8 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
                 color: Theme.of(context).disabledColor.withValues(alpha: 0.08),
                 padding: const EdgeInsets.fromLTRB(Dimensions.paddingSizeDefault, Dimensions.paddingSizeLarge, Dimensions.paddingSizeDefault, Dimensions.paddingSizeLarge),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  hasVariations ? (_newVariation ? NewVariationView(item: item, itemController: itemController, discount: initialDiscount,
-                  discountType: discountType, showOriginalPrice: (price > priceWithDiscount) && (discountType == 'percent'),
+                  hasVariations ? (_newVariation ? NewVariationView(item: item, itemController: itemController, discount: unitDiscount,
+                  discountType: discountType, showOriginalPrice: (price > priceWithDiscount) && (discountType == 'percent' || discountType == 'percentage'),
                   highlightedIndex: _highlightedVariationIndex, cardKeys: _variationCardKeys,
                   collapsedIndexes: _collapsedVariationIndexes, onToggleCollapse: _toggleVariationCollapse,
                   ) : VariationView(item: item, itemController: itemController,
@@ -408,7 +455,8 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
             itemController: itemController,
             item: item,
             price: price,
-            discount: discount,
+            unitDiscount: unitDiscount,
+            lineDiscount: lineDiscount,
             discountType: discountType,
             stock: stock,
             addonsCost: addonsCost,
@@ -581,12 +629,14 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
                   color: Theme.of(context).cardColor, fontSize: Dimensions.fontSizeLarge,
                 )),
                 const SizedBox(height: Dimensions.paddingSizeExtraSmall),
-                Text(
-                  '${'available_will_be'.tr} ${DateConverter.convertTimeToTime(item.availableTimeStarts!)} - ${DateConverter.convertTimeToTime(item.availableTimeEnds!)}',
-                  textAlign: TextAlign.center,
-                  style: robotoRegular.copyWith(color: Theme.of(context).cardColor),
-
-                ),
+                if ((item.status == null || item.status == 1) &&
+                    item.availableTimeStarts != null && item.availableTimeStarts!.isNotEmpty &&
+                    item.availableTimeEnds != null && item.availableTimeEnds!.isNotEmpty)
+                  Text(
+                    '${'available_will_be'.tr} ${DateConverter.convertTimeToTime(item.availableTimeStarts!)} - ${DateConverter.convertTimeToTime(item.availableTimeEnds!)}',
+                    textAlign: TextAlign.center,
+                    style: robotoRegular.copyWith(color: Theme.of(context).cardColor),
+                  ),
               ]),
             ),
           ),
@@ -844,14 +894,15 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
 
   Widget _buildProductSummary({required BuildContext context, required Item item, required double? startingPrice, required double? endingPrice,
     required double? initialDiscount, required String? discountType}) {
+    final double safeStartingPrice = startingPrice ?? 0;
     final String priceText = endingPrice != null
-        ? '${PriceConverter.convertPrice(startingPrice, discount: initialDiscount, discountType: discountType)} - ${PriceConverter.convertPrice(endingPrice, discount: initialDiscount, discountType: discountType)}'
-        : PriceConverter.convertPrice(startingPrice, discount: initialDiscount, discountType: discountType);
+        ? '${PriceConverter.convertPrice(safeStartingPrice, discount: initialDiscount, discountType: discountType)} - ${PriceConverter.convertPrice(endingPrice, discount: initialDiscount, discountType: discountType)}'
+        : PriceConverter.convertPrice(safeStartingPrice, discount: initialDiscount, discountType: discountType);
     final String originalPriceText = endingPrice != null
-        ? '${PriceConverter.convertPrice(startingPrice)} - ${PriceConverter.convertPrice(endingPrice)}'
-        : PriceConverter.convertPrice(startingPrice);
-    final double baseDiscountedPrice = PriceConverter.convertWithDiscount(startingPrice, initialDiscount, discountType) ?? startingPrice!;
-    final bool showOriginalPrice = startingPrice! > baseDiscountedPrice;
+        ? '${PriceConverter.convertPrice(safeStartingPrice)} - ${PriceConverter.convertPrice(endingPrice)}'
+        : PriceConverter.convertPrice(safeStartingPrice);
+    final double baseDiscountedPrice = PriceConverter.convertWithDiscount(safeStartingPrice, initialDiscount ?? 0, discountType) ?? safeStartingPrice;
+    final bool showOriginalPrice = safeStartingPrice > baseDiscountedPrice;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (item.storeName != null && item.storeName!.isNotEmpty) ...[
@@ -903,21 +954,26 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
 
       widget.isCampaign ? const SizedBox() : AvgReviewWidget(avgRating: item.avgRating ?? 0, ratingCount: item.ratingCount ?? 0),
 
-      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Text(priceText, textDirection: TextDirection.ltr, style: robotoBold.copyWith(fontSize: Dimensions.fontSizeExtraLarge + 2)),
-        SizedBox(width: showOriginalPrice ? Dimensions.paddingSizeExtraSmall : 0),
-        showOriginalPrice ? Padding(
-          padding: const EdgeInsets.only(bottom: 3),
-          child: Text(
-            originalPriceText,
-            textDirection: TextDirection.ltr,
-            style: robotoRegular.copyWith(
-              fontSize: Dimensions.fontSizeDefault,
-              decoration: TextDecoration.lineThrough,
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.end,
+        spacing: Dimensions.paddingSizeExtraSmall,
+        runSpacing: 2,
+        children: [
+          Text(priceText, textDirection: TextDirection.ltr, style: robotoBold.copyWith(fontSize: Dimensions.fontSizeExtraLarge + 2)),
+          if (showOriginalPrice)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Text(
+                originalPriceText,
+                textDirection: TextDirection.ltr,
+                style: robotoRegular.copyWith(
+                  fontSize: Dimensions.fontSizeDefault,
+                  decoration: TextDecoration.lineThrough,
+                ),
+              ),
             ),
-          ),
-        ) : const SizedBox(),
-      ]),
+        ],
+      ),
       const SizedBox(height: Dimensions.paddingSizeExtraSmall),
 
       if (item.unitType != null && item.unitType!.isNotEmpty) ...[
@@ -963,7 +1019,7 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
   }
 
   String _formatDiscountLabel(double? discount, String? discountType) {
-    if(discountType == 'percent') {
+    if(discountType == 'percent' || discountType == 'percentage') {
       final double discountValue = discount ?? 0;
       return '-${discountValue.toStringAsFixed(discountValue.truncateToDouble() == discountValue ? 0 : 1)}%';
     }
@@ -1065,12 +1121,64 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
           color: Theme.of(context).primaryColor, fontSize: Dimensions.fontSizeLarge,
         )),
         const SizedBox(height: Dimensions.paddingSizeExtraSmall),
-        Text(
-          '${'available_will_be'.tr} ${DateConverter.convertTimeToTime(item.availableTimeStarts!)} - ${DateConverter.convertTimeToTime(item.availableTimeEnds!)}',
-          textAlign: TextAlign.center,
-          style: robotoRegular,
-        ),
+        if ((item.status == null || item.status == 1) &&
+            item.availableTimeStarts != null && item.availableTimeStarts!.isNotEmpty &&
+            item.availableTimeEnds != null && item.availableTimeEnds!.isNotEmpty)
+          Text(
+            '${'available_will_be'.tr} ${DateConverter.convertTimeToTime(item.availableTimeStarts!)} - ${DateConverter.convertTimeToTime(item.availableTimeEnds!)}',
+            textAlign: TextAlign.center,
+            style: robotoRegular,
+          ),
       ]),
+    );
+  }
+
+  Widget _buildLoadErrorState(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(Dimensions.paddingSizeExtraLarge),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.error_outline_rounded,
+            size: 48,
+            color: Theme.of(context).colorScheme.error,
+          ),
+          const SizedBox(height: Dimensions.paddingSizeDefault),
+          Text(
+            'something_went_wrong'.tr,
+            textAlign: TextAlign.center,
+            style: robotoBold.copyWith(fontSize: Dimensions.fontSizeLarge),
+          ),
+          const SizedBox(height: Dimensions.paddingSizeSmall),
+          Text(
+            'connection_to_api_server_failed'.tr,
+            textAlign: TextAlign.center,
+            style: robotoRegular.copyWith(
+              fontSize: Dimensions.fontSizeSmall,
+              color: Theme.of(context).hintColor,
+            ),
+          ),
+          const SizedBox(height: Dimensions.paddingSizeLarge),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('close'.tr),
+                ),
+              ),
+              const SizedBox(width: Dimensions.paddingSizeDefault),
+              Expanded(
+                child: CustomButton(
+                  buttonText: 'retry'.tr,
+                  onPressed: _loadItemDetails,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1079,7 +1187,8 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
     required ItemController itemController,
     required Item item,
     required double price,
-    required double? discount,
+    required double? unitDiscount,
+    required double? lineDiscount,
     required String? discountType,
     required int? stock,
     required double addonsCost,
@@ -1089,17 +1198,19 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
     required List<AddOn> addOnIdList,
     required List<AddOns> addOnsList,
   }) {
-    if(!item.scheduleOrder! && !isAvailable) {
+    if((item.status == 0) || ((item.scheduleOrder != true) && !isAvailable)) {
       return const SizedBox();
     }
 
     final int? missingIdx = _findFirstMissingRequiredIndex(item, itemController);
     final bool hasUnmetRequired = missingIdx != null;
 
-    double? cost = PriceConverter.convertWithDiscount((price * itemController.quantity!), discount, discountType);
-    double withAddonCost = cost! + addonsCost;
-    double originalTotal = (price * itemController.quantity!) + addonsCost;
-    bool showOriginalTotal = (discount ?? 0) > 0 && originalTotal > withAddonCost;
+    final int qty = itemController.quantity ?? 1;
+    final double linePrice = price * qty;
+    double cost = PriceConverter.convertWithDiscount(linePrice, lineDiscount ?? 0, discountType) ?? linePrice;
+    double withAddonCost = cost + addonsCost;
+    double originalTotal = linePrice + addonsCost;
+    bool showOriginalTotal = (unitDiscount ?? 0) > 0 && originalTotal > withAddonCost;
 
     return Positioned(left: 0, right: 0, bottom: 0,
       child: Container(
@@ -1196,16 +1307,18 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
               const SizedBox(width: Dimensions.paddingSizeLarge),
 
               Expanded(child: GetBuilder< CartController>(builder: (cartController) {
+                final bool stockEnabled = Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false;
+                final bool isOutOfStock = stockEnabled && (stock ?? 0) <= 0;
                 return CustomButton(
                   width: ResponsiveHelper.isDesktop(context) ? MediaQuery.of(context).size.width / 2.0 : null,
                   height: 42,
                   radius: Dimensions.radiusDefault,
                   isLoading: cartController.isLoading || _isAddingToCart,
                   fontSize: Dimensions.fontSizeDefault,
-                  buttonText: (Get.find<SplashController>().configModel!.moduleConfig!.module!.stock! && stock! <= 0)
+                  buttonText: isOutOfStock
                       ? 'out_of_stock'.tr : widget.isCampaign ? 'order_now'.tr
                       : (widget.cart != null || itemController.cartIndex != -1) ? 'update_in_cart'.tr : 'add_to_cart'.tr,
-                  onPressed: (Get.find<SplashController>().configModel!.moduleConfig!.module!.stock! && stock! <= 0) ? null : () async {
+                  onPressed: isOutOfStock ? null : () async {
                     if (_isAddingToCart || _sheetClosed) {
                       return;
                     }
@@ -1217,7 +1330,7 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
                         cartController: cartController,
                         price: price,
                         priceWithDiscountAndAddons: priceWithDiscountAndAddons,
-                        discount: discount,
+                        discount: unitDiscount,
                         discountType: discountType,
                         variation: variation,
                         stock: stock,
@@ -1295,7 +1408,7 @@ class _ItemNewBottomSheetState extends State<ItemNewBottomSheet> {
     }else {
       CartModel cartModel = CartModel(
           null, price, priceWithDiscountAndAddons, variation != null ? [variation] : [], itemController.selectedVariations,
-          (price - PriceConverter.convertWithDiscount(price, discount, discountType)!),
+          (price - (PriceConverter.convertWithDiscount(price, discount ?? 0, discountType) ?? price)),
           itemController.quantity, addOnIdList, addOnsList, widget.isCampaign, stock, item,  item.quantityLimit
       );
 

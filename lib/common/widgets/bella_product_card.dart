@@ -7,7 +7,9 @@ import 'package:sixam_mart/common/widgets/custom_snackbar.dart';
 import 'package:sixam_mart/features/favourite/controllers/favourite_controller.dart';
 import 'package:sixam_mart/features/item/controllers/item_controller.dart';
 import 'package:sixam_mart/features/item/domain/models/item_model.dart';
+import 'package:sixam_mart/features/splash/controllers/splash_controller.dart';
 import 'package:sixam_mart/helper/auth_helper.dart';
+import 'package:sixam_mart/helper/date_converter.dart';
 import 'package:sixam_mart/helper/price_converter.dart';
 import 'package:sixam_mart/util/dimensions.dart';
 import 'package:sixam_mart/util/styles.dart';
@@ -63,13 +65,25 @@ class BellaProductCard extends StatelessWidget {
     final double cardTopPadding = (imageSize * 0.62) + 14.0;
     const Color priceColor = Color(0xFFFA4A0C);
 
+    final double? startingPrice = Get.isRegistered<ItemController>()
+        ? (Get.find<ItemController>().getStartingPrice(item) ?? item.price)
+        : item.price;
+
+    final bool stockEnabled = Get.isRegistered<SplashController>()
+        ? (Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false)
+        : false;
+    final bool isStatusInactive = item.status == 0;
+    final bool isOutOfStock = stockEnabled && item.stock != null && item.stock! <= 0;
+    final bool isTimeAvailable = DateConverter.isAvailable(item.availableTimeStarts, item.availableTimeEnds);
+    final bool isAvailable = !isStatusInactive && !isOutOfStock && isTimeAvailable;
+
     // Calculate discount text if applicable
     String? discountStr;
     if (item.discount != null && item.discount! > 0) {
-      if (item.discountType == 'percent') {
+      if (item.discountType == 'percent' || item.discountType == 'percentage') {
         discountStr = '-${item.discount!.toInt()}%';
-      } else if (item.price != null && item.price! > 0) {
-        final pct = ((item.discount! / item.price!) * 100).round();
+      } else if (startingPrice != null && startingPrice > 0) {
+        final pct = ((item.discount! / startingPrice) * 100).round();
         discountStr = '-$pct%';
       } else {
         discountStr = 'SAVE';
@@ -136,7 +150,7 @@ class BellaProductCard extends StatelessWidget {
                   // Price: Bold centered in signature accent
                   Text(
                     PriceConverter.convertPrice(
-                      item.price,
+                      startingPrice ?? 0,
                       discount: item.discount,
                       discountType: item.discountType,
                     ),
@@ -152,7 +166,7 @@ class BellaProductCard extends StatelessWidget {
                   if (item.discount != null && item.discount! > 0) ...[
                     const SizedBox(height: 2),
                     Text(
-                      PriceConverter.convertPrice(item.price),
+                      PriceConverter.convertPrice(startingPrice ?? 0),
                       style: robotoRegular.copyWith(
                         fontSize: Dimensions.fontSizeExtraSmall,
                         decoration: TextDecoration.lineThrough,
@@ -163,41 +177,62 @@ class BellaProductCard extends StatelessWidget {
 
                   const SizedBox(height: 10),
 
-                  // Quick Add / Cart Count Controller
-                  CartCountView(
-                    item: item,
-                    onBeforeAdd: onBeforeTap,
-                    child: Container(
-                      height: 30,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                  // Quick Add / Cart Count Controller (or disabled pill if unavailable/OOS)
+                  if (!isAvailable && (isStatusInactive || isOutOfStock || !(item.scheduleOrder ?? false)))
+                    Container(
+                      constraints: const BoxConstraints(minHeight: 30),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A859),
+                        color: Colors.grey.shade300,
                         borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF00A859).withValues(alpha: 0.30),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.add_rounded, color: Colors.white, size: 16),
-                          const SizedBox(width: 4),
-                          Text(
-                            'add'.tr,
-                            style: robotoBold.copyWith(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                      alignment: Alignment.center,
+                      child: Text(
+                        isOutOfStock ? 'out_of_stock'.tr : 'unavailable'.tr,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: robotoBold.copyWith(
+                          color: Colors.grey.shade700,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else
+                    CartCountView(
+                      item: item,
+                      onBeforeAdd: onBeforeTap,
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 30),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00A859),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00A859).withValues(alpha: 0.30),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              'add'.tr,
+                              style: robotoBold.copyWith(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -224,11 +259,32 @@ class BellaProductCard extends StatelessWidget {
                   ],
                 ),
                 child: ClipOval(
-                  child: CustomImage(
-                    image: item.imageFullUrl ?? '',
-                    fit: BoxFit.cover,
-                    width: imageSize,
-                    height: imageSize,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomImage(
+                        image: item.imageFullUrl ?? '',
+                        fit: BoxFit.cover,
+                        width: imageSize,
+                        height: imageSize,
+                      ),
+                      if (!isAvailable)
+                        Container(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            isOutOfStock ? 'out_of_stock'.tr : 'not_available_now_break'.tr,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: robotoBold.copyWith(
+                              color: Colors.white,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),

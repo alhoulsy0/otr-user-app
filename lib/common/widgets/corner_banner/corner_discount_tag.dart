@@ -42,7 +42,7 @@ class CornerDiscountTag extends StatelessWidget {
         child: _buildBannerContent(),
       );
     } else {
-      return (discount! > 0 || freeDelivery!) ? CornerBanner(
+      return ((discount ?? 0) > 0 || (freeDelivery ?? false)) ? CornerBanner(
         bannerPosition: bannerPosition,
         bannerColor: Theme.of(context).colorScheme.error,
         elevation: 5,
@@ -53,6 +53,7 @@ class CornerDiscountTag extends StatelessWidget {
   }
 
   Widget _buildBannerContent() {
+    final double safeDiscount = discount ?? 0;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3.0,),
       child: Material(
@@ -69,9 +70,9 @@ class CornerDiscountTag extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children:  [
                 Text(
-                  discount! > 0 ? '$discount${discountType == 'percent' ? '%'
-                      : Get.find<SplashController>().configModel!.currencySymbol} ${'off'.tr}' : 'free_delivery'.tr,
-                  textDirection: discount! > 0 ? TextDirection.ltr : null,
+                  safeDiscount > 0 ? '$safeDiscount${(discountType == 'percent' || discountType == 'percentage') ? '%'
+                      : Get.find<SplashController>().configModel?.currencySymbol ?? ''} ${'off'.tr}' : 'free_delivery'.tr,
+                  textDirection: safeDiscount > 0 ? TextDirection.ltr : null,
                   style: robotoMedium.copyWith(
                     color: Colors.white,
                     fontSize: fontSize ?? (ResponsiveHelper.isMobile(Get.context) ? 8 : 12),

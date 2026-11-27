@@ -433,6 +433,7 @@ class ItemController extends GetxController implements GetxService {
     DataSourceEnum dataSource = DataSourceEnum.local,
     bool notify = false,
     bool firstTimeCategoryLoad = false,
+    bool fromRecall = false,
   }) async {
     if (_searchController.text.isEmpty) {
       _isSearching = false;
@@ -445,9 +446,11 @@ class ItemController extends GetxController implements GetxService {
     if (offset == '1') {
       _offsetList = [];
       _offset = 1;
-      _popularItemList = null;
-      if (firstTimeCategoryLoad) _categoryList = null;
-      if (notify) update();
+      if (!fromRecall) {
+        _popularItemList = null;
+        if (firstTimeCategoryLoad) _categoryList = null;
+        if (notify) update();
+      }
     }
 
     if (!_offsetList.contains(offset)) {
@@ -467,11 +470,13 @@ class ItemController extends GetxController implements GetxService {
 
       _preparePopularItems(itemModel, offset, firstTimeCategoryLoad);
 
-      if (dataSource == DataSourceEnum.local) {
-        getPopularItemList(
+      if (dataSource == DataSourceEnum.local && offset == '1') {
+        await getPopularItemList(
           notify: notify,
           dataSource: DataSourceEnum.client,
           offset: '1',
+          firstTimeCategoryLoad: firstTimeCategoryLoad,
+          fromRecall: true,
         );
       }
     } else {
@@ -493,7 +498,9 @@ class ItemController extends GetxController implements GetxService {
         if (firstTimeCategoryLoad) _categoryList = [];
       }
       _popularItemList!.addAll(itemModel.items!);
-      if (firstTimeCategoryLoad) _categoryList!.addAll(itemModel.categories!);
+      if (firstTimeCategoryLoad && itemModel.categories != null) {
+        _categoryList!.addAll(itemModel.categories!);
+      }
       _pageSize = itemModel.totalSize;
       _isLoading = false;
     }
@@ -505,6 +512,7 @@ class ItemController extends GetxController implements GetxService {
     DataSourceEnum dataSource = DataSourceEnum.local,
     bool notify = false,
     bool firstTimeCategoryLoad = false,
+    bool fromRecall = false,
   }) async {
     if (_searchController.text.isEmpty) {
       _isSearching = false;
@@ -517,10 +525,12 @@ class ItemController extends GetxController implements GetxService {
     if (offset == '1') {
       _offsetList = [];
       _offset = 1;
-      _reviewedItemList = null;
-      _reviewedCategoriesList = null;
-      if (firstTimeCategoryLoad) _categoryList = null;
-      if (notify) update();
+      if (!fromRecall) {
+        _reviewedItemList = null;
+        _reviewedCategoriesList = null;
+        if (firstTimeCategoryLoad) _categoryList = null;
+        if (notify) update();
+      }
     }
 
     if (!_offsetList.contains(offset)) {
@@ -540,11 +550,13 @@ class ItemController extends GetxController implements GetxService {
 
       _preparedReviewedItems(itemModel, offset, firstTimeCategoryLoad);
 
-      if (dataSource == DataSourceEnum.local) {
-        getReviewedItemList(
+      if (dataSource == DataSourceEnum.local && offset == '1') {
+        await getReviewedItemList(
           notify: notify,
           dataSource: DataSourceEnum.client,
           offset: '1',
+          firstTimeCategoryLoad: firstTimeCategoryLoad,
+          fromRecall: true,
         );
       }
     } else {
@@ -567,8 +579,10 @@ class ItemController extends GetxController implements GetxService {
         if (firstTimeCategoryLoad) _categoryList = [];
       }
       _reviewedItemList!.addAll(itemModel.items!);
-      _reviewedCategoriesList!.addAll(itemModel.categories!);
-      if (firstTimeCategoryLoad) _categoryList!.addAll(itemModel.categories!);
+      if (itemModel.categories != null) {
+        _reviewedCategoriesList!.addAll(itemModel.categories!);
+        if (firstTimeCategoryLoad) _categoryList!.addAll(itemModel.categories!);
+      }
       _pageSize = itemModel.totalSize;
       _isLoading = false;
     }
@@ -580,6 +594,7 @@ class ItemController extends GetxController implements GetxService {
     DataSourceEnum dataSource = DataSourceEnum.local,
     bool notify = false,
     bool firstTimeCategoryLoad = false,
+    bool fromRecall = false,
   }) async {
     if (_searchController.text.isEmpty) {
       _isSearching = false;
@@ -592,9 +607,11 @@ class ItemController extends GetxController implements GetxService {
     if (offset == '1') {
       _offsetList = [];
       _offset = 1;
-      _discountedItemList = null;
-      if (firstTimeCategoryLoad) _categoryList = null;
-      if (notify) update();
+      if (!fromRecall) {
+        _discountedItemList = null;
+        if (firstTimeCategoryLoad) _categoryList = null;
+        if (notify) update();
+      }
     }
 
     if (!_offsetList.contains(offset)) {
@@ -614,11 +631,13 @@ class ItemController extends GetxController implements GetxService {
 
       _prepareDiscountedItems(itemModel, offset, firstTimeCategoryLoad);
 
-      if (dataSource == DataSourceEnum.local) {
-        getDiscountedItemList(
+      if (dataSource == DataSourceEnum.local && offset == '1') {
+        await getDiscountedItemList(
           notify: notify,
           dataSource: DataSourceEnum.client,
           offset: '1',
+          firstTimeCategoryLoad: firstTimeCategoryLoad,
+          fromRecall: true,
         );
       }
     } else {
@@ -640,7 +659,9 @@ class ItemController extends GetxController implements GetxService {
         if (firstTimeCategoryLoad) _categoryList = [];
       }
       _discountedItemList!.addAll(itemModel.items!);
-      if (firstTimeCategoryLoad) _categoryList!.addAll(itemModel.categories!);
+      if (firstTimeCategoryLoad && itemModel.categories != null) {
+        _categoryList!.addAll(itemModel.categories!);
+      }
       _pageSize = itemModel.totalSize;
       _isLoading = false;
     }
@@ -664,15 +685,18 @@ class ItemController extends GetxController implements GetxService {
         _featuredCategoriesItem = await itemServiceInterface
             .getFeaturedCategoriesItemList(dataSource);
         update();
-        getFeaturedCategoriesItemList(
+        await getFeaturedCategoriesItemList(
           false,
           notify,
           dataSource: DataSourceEnum.client,
           fromRecall: true,
         );
       } else {
-        _featuredCategoriesItem = await itemServiceInterface
+        final ItemModel? fresh = await itemServiceInterface
             .getFeaturedCategoriesItemList(dataSource);
+        if (fresh != null || !fromRecall) {
+          _featuredCategoriesItem = fresh;
+        }
         update();
       }
     }
@@ -700,7 +724,7 @@ class ItemController extends GetxController implements GetxService {
         );
         _prepareRecommendedItems(items);
 
-        getRecommendedItemList(
+        await getRecommendedItemList(
           false,
           type,
           notify,
@@ -745,16 +769,19 @@ class ItemController extends GetxController implements GetxService {
         );
         _isLoading = false;
         update();
-        getBasicMedicine(
+        await getBasicMedicine(
           false,
           notify,
           fromRecall: true,
           dataSource: DataSourceEnum.client,
         );
       } else {
-        _basicMedicineModel = await itemServiceInterface.getBasicMedicine(
+        final BasicMedicineModel? fresh = await itemServiceInterface.getBasicMedicine(
           DataSourceEnum.client,
         );
+        if (fresh != null || !fromRecall) {
+          _basicMedicineModel = fresh;
+        }
         _isLoading = false;
         update();
       }

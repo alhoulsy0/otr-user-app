@@ -21,25 +21,27 @@ class DiscountTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool isRightSide = Get.find<SplashController>().configModel!.currencySymbolDirection == 'right';
-    String currencySymbol = Get.find<SplashController>().configModel!.currencySymbol!;
+    bool isRightSide = (Get.find<SplashController>().configModel?.currencySymbolDirection ?? 'left') == 'right';
+    String currencySymbol = Get.find<SplashController>().configModel?.currencySymbol ?? '';
+    final double safeDiscount = discount ?? 0;
+    final bool hasFreeDelivery = freeDelivery ?? false;
 
-    return (discount! > 0 || freeDelivery!) ? Positioned(
-      top: fromTop, left: inLeft ? isFloating! ? Dimensions.paddingSizeSmall : 0 : null, right: inLeft ? null : 0,
+    return (safeDiscount > 0 || hasFreeDelivery) ? Positioned(
+      top: fromTop, left: inLeft ? (isFloating ?? true) ? Dimensions.paddingSizeSmall : 0 : null, right: inLeft ? null : 0,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.error,
-          borderRadius: fromTaxi! ? const BorderRadius.only(topLeft: Radius.circular(Dimensions.radiusDefault), bottomRight: Radius.circular(Dimensions.radiusDefault))
+          borderRadius: (fromTaxi ?? false) ? const BorderRadius.only(topLeft: Radius.circular(Dimensions.radiusDefault), bottomRight: Radius.circular(Dimensions.radiusDefault))
               : BorderRadius.horizontal(
-            right: Radius.circular(isFloating! ? Dimensions.radiusLarge : inLeft ? Dimensions.radiusSmall : 0),
-            left: Radius.circular(isFloating! ? Dimensions.radiusLarge : inLeft ? 0 : Dimensions.radiusSmall),
+            right: Radius.circular((isFloating ?? true) ? Dimensions.radiusLarge : inLeft ? Dimensions.radiusSmall : 0),
+            left: Radius.circular((isFloating ?? true) ? Dimensions.radiusLarge : inLeft ? 0 : Dimensions.radiusSmall),
           ),
         ),
         child: Text(
-          discount! > 0 ? '${(isRightSide || discountType == 'percent') ? '' : currencySymbol}$discount${discountType == 'percent' ? '%'
+          safeDiscount > 0 ? '${(isRightSide || discountType == 'percent' || discountType == 'percentage') ? '' : currencySymbol}$safeDiscount${(discountType == 'percent' || discountType == 'percentage') ? '%'
               : isRightSide ? currencySymbol : ''}' : 'free_delivery'.tr,
-          textDirection: discount! > 0 ? TextDirection.ltr : null,
+          textDirection: safeDiscount > 0 ? TextDirection.ltr : null,
           style: robotoMedium.copyWith(
             color: Colors.white,
             fontSize: fontSize ?? (ResponsiveHelper.isMobile(context) ? 8 : 12),

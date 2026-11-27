@@ -22,7 +22,7 @@ class HeaderHelper {
     return {
       'Content-Type': 'application/json; charset=UTF-8',
       AppConstants.zoneId: addressModel?.zoneIds != null ? jsonEncode(addressModel?.zoneIds) : '',
-      moduleID != null ? AppConstants.moduleId: '$moduleID' : '',
+      if (moduleID != null) AppConstants.moduleId: '$moduleID',
       AppConstants.localizationKey: sharedPreferences.getString(AppConstants.languageCode) ?? AppConstants.languages[0].languageCode!,
       AppConstants.latitude: addressModel?.latitude != null ? jsonEncode(addressModel?.latitude) : '0',
       AppConstants.longitude: addressModel?.longitude != null ? jsonEncode(addressModel?.longitude) : '0',

@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/address/controllers/address_controller.dart';
 import 'package:sixam_mart/features/banner/controllers/banner_controller.dart';
 import 'package:sixam_mart/features/brands/controllers/brands_controller.dart';
@@ -50,9 +51,10 @@ class HomeScreen {
       }
       Get.find<BannerController>().getPromotionalBannerList(reload);
       Get.find<ReelsController>().getReelsList(offset: 1);
-      Get.find<ItemController>().getDiscountedItemList(offset: '1', firstTimeCategoryLoad: true);
-      Get.find<ItemController>().getPopularItemList(offset: '1', firstTimeCategoryLoad: true);
-      Get.find<ItemController>().getReviewedItemList(offset: '1', firstTimeCategoryLoad: true);
+      final DataSourceEnum itemDataSource = reload ? DataSourceEnum.client : DataSourceEnum.local;
+      Get.find<ItemController>().getDiscountedItemList(offset: '1', dataSource: itemDataSource, firstTimeCategoryLoad: true);
+      Get.find<ItemController>().getPopularItemList(offset: '1', dataSource: itemDataSource, firstTimeCategoryLoad: true);
+      Get.find<ItemController>().getReviewedItemList(offset: '1', dataSource: itemDataSource, firstTimeCategoryLoad: true);
       Get.find<CategoryController>().getCategoryList(reload);
       Get.find<StoreController>().getPopularStoreList(reload, 'all', false);
       Get.find<CampaignController>().getBasicCampaignList(reload);

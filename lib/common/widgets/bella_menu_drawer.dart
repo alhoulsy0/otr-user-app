@@ -4,6 +4,8 @@ import 'package:get/get.dart';
 import 'package:sixam_mart/common/widgets/confirmation_dialog.dart';
 import 'package:sixam_mart/features/auth/controllers/auth_controller.dart';
 import 'package:sixam_mart/features/cart/controllers/cart_controller.dart';
+import 'package:sixam_mart/features/category/controllers/category_controller.dart';
+import 'package:sixam_mart/features/category/domain/models/category_model.dart';
 import 'package:sixam_mart/features/category/screens/category_item_screen.dart';
 import 'package:sixam_mart/features/favourite/controllers/favourite_controller.dart';
 import 'package:sixam_mart/features/onboard/screens/onboarding_new_screen.dart';
@@ -11,6 +13,7 @@ import 'package:sixam_mart/features/profile/controllers/profile_controller.dart'
 import 'package:sixam_mart/features/reels/screens/reels_screen.dart';
 import 'package:sixam_mart/helper/auth_helper.dart';
 import 'package:sixam_mart/helper/route_helper.dart';
+import 'package:sixam_mart/util/app_constants.dart';
 import 'package:sixam_mart/util/dimensions.dart';
 import 'package:sixam_mart/util/images.dart';
 import 'package:sixam_mart/util/styles.dart';
@@ -19,6 +22,14 @@ import 'package:url_launcher/url_launcher_string.dart';
 /// Vibrant full-feature side drawer matching modern supermarket standards.
 class BellaMenuDrawer extends StatelessWidget {
   const BellaMenuDrawer({super.key});
+
+  CategoryModel? _resolveCategory(int fallbackId, {String? slug}) {
+    if (!Get.isRegistered<CategoryController>()) return null;
+    final List<CategoryModel>? list = Get.find<CategoryController>().categoryList;
+    if (list == null || list.isEmpty) return null;
+    return list.firstWhereOrNull((c) => c.id == fallbackId) ??
+        (slug != null ? list.firstWhereOrNull((c) => c.slug == slug) : null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,9 +167,13 @@ class BellaMenuDrawer extends StatelessWidget {
                       badge: 'HOT',
                       onTap: () {
                         Get.back();
-                        Get.to(() => const CategoryItemScreen(
-                          categoryID: '16',
-                          categoryName: 'بضائع مستوردة فاخرة',
+                        final CategoryModel? importedCat = _resolveCategory(
+                          AppConstants.importedLuxuryCategoryId,
+                          slug: AppConstants.importedLuxuryCategorySlug,
+                        );
+                        Get.to(() => CategoryItemScreen(
+                          categoryID: (importedCat?.id ?? AppConstants.importedLuxuryCategoryId).toString(),
+                          categoryName: importedCat?.name ?? 'Imported Luxury'.tr,
                         ));
                       },
                     ),
@@ -170,9 +185,13 @@ class BellaMenuDrawer extends StatelessWidget {
                       title: 'Exclusive Luxury (حصريات OTR)'.tr,
                       onTap: () {
                         Get.back();
-                        Get.to(() => const CategoryItemScreen(
-                          categoryID: '7',
-                          categoryName: 'حلويات وشوكولاتة فاخرة',
+                        final CategoryModel? exclusiveCat = _resolveCategory(
+                          AppConstants.snacksChocolateCategoryId,
+                          slug: 'snacks-chocolate',
+                        );
+                        Get.to(() => CategoryItemScreen(
+                          categoryID: (exclusiveCat?.id ?? AppConstants.snacksChocolateCategoryId).toString(),
+                          categoryName: exclusiveCat?.name ?? 'Snacks & Chocolate'.tr,
                         ));
                       },
                     ),

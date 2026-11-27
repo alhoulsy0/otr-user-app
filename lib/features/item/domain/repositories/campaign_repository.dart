@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/item/domain/models/basic_campaign_model.dart';
@@ -25,7 +26,14 @@ class CampaignRepository implements CampaignRepositoryInterface {
 
   Future<List<BasicCampaignModel>?> _getBasicCampaignList(DataSourceEnum source) async {
     List<BasicCampaignModel>? basicCampaignList;
-    String cacheId = '${AppConstants.basicCampaignUri}-banner-${Get.find<SplashController>().module!.id!}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.basicCampaignUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: {'kind': 'banner'},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -33,7 +41,7 @@ class CampaignRepository implements CampaignRepositoryInterface {
         if (response.statusCode == 200) {
           basicCampaignList = [];
           response.body.forEach((campaign) => basicCampaignList!.add(BasicCampaignModel.fromJson(campaign)));
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:
@@ -49,7 +57,13 @@ class CampaignRepository implements CampaignRepositoryInterface {
 
   Future<List<Item>?> _getItemCampaignList(DataSourceEnum source) async {
     List<Item>? itemCampaignList;
-    String cacheId = '${AppConstants.basicCampaignUri}-${Get.find<SplashController>().module!.id!}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.itemCampaignUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -57,7 +71,7 @@ class CampaignRepository implements CampaignRepositoryInterface {
         if (response.statusCode == 200) {
           itemCampaignList = [];
           response.body.forEach((camp) => itemCampaignList!.add(Item.fromJson(camp)));
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:

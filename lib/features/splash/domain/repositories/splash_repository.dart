@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/common/models/response_model.dart';
@@ -23,18 +24,37 @@ class SplashRepository implements SplashRepositoryInterface {
   @override
   Future<Response> getConfigData({required DataSourceEnum source}) async {
     Response responseData = Response(statusCode: 00, body: ApiClient.noInternetMessage);
-    String cacheId = AppConstants.configUri + AppConstants.appVersion.toString();
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.configUri,
+      languageCode: headers[AppConstants.localizationKey],
+      params: {'v': AppConstants.appVersion},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
         Response response = await apiClient.getData(AppConstants.configUri);
         if (response.statusCode == 200) {
           responseData = Response(statusCode: 200, body: response.body);
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(
+            source,
+            cacheId,
+            jsonEncode(response.body),
+            headers,
+            validateModule: false,
+            validateZone: false,
+          );
         }
 
       case DataSourceEnum.local:
-        String? cacheResponseData = await LocalClient.organize(source, cacheId, null, null);
+        String? cacheResponseData = await LocalClient.organize(
+          source,
+          cacheId,
+          null,
+          headers,
+          validateModule: false,
+          validateZone: false,
+        );
         if(cacheResponseData != null) {
           responseData = Response(statusCode: 200, body: jsonDecode(cacheResponseData));
         }
@@ -130,7 +150,12 @@ class SplashRepository implements SplashRepositoryInterface {
   @override
   Future<List<ModuleModel>?> getModules({Map<String, String>? headers, required DataSourceEnum source}) async {
     List<ModuleModel>? moduleList;
-    String cacheId = AppConstants.moduleUri;
+    final Map<String, String> effectiveHeaders = headers ?? apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.moduleUri,
+      zoneId: effectiveHeaders[AppConstants.zoneId],
+      languageCode: effectiveHeaders[AppConstants.localizationKey],
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -138,11 +163,25 @@ class SplashRepository implements SplashRepositoryInterface {
         if (response.statusCode == 200) {
           moduleList = [];
           response.body.forEach((storeCategory) => moduleList!.add(ModuleModel.fromJson(storeCategory)));
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(
+            source,
+            cacheId,
+            jsonEncode(response.body),
+            effectiveHeaders,
+            validateModule: false,
+            validateZone: false,
+          );
         }
 
       case DataSourceEnum.local:
-        String? cacheResponseData = await LocalClient.organize(source, cacheId, null, null);
+        String? cacheResponseData = await LocalClient.organize(
+          source,
+          cacheId,
+          null,
+          effectiveHeaders,
+          validateModule: false,
+          validateZone: false,
+        );
         if(cacheResponseData != null) {
           moduleList = [];
           jsonDecode(cacheResponseData).forEach((storeCategory) => moduleList!.add(ModuleModel.fromJson(storeCategory)));

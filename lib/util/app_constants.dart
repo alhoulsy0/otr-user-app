@@ -28,6 +28,9 @@ class AppConstants {
   static const String subCategoryUri = '/api/v1/categories/childes/';
   static const String categoryItemUri = '/api/v1/categories/items/';
   static const String categoryStoreUri = '/api/v1/categories/stores/';
+  static const int importedLuxuryCategoryId = 144;
+  static const String importedLuxuryCategorySlug = 'imported-luxury';
+  static const int snacksChocolateCategoryId = 56;
   static const String configUri = '/api/v1/config';
   static const String trackUri = '/api/v1/customer/order/track?order_id=';
   static const String messageUri = '/api/v1/customer/message/get';

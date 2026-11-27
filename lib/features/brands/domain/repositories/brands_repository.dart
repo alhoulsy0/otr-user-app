@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/brands/domain/models/brands_model.dart';
@@ -17,7 +18,13 @@ class BrandsRepository implements BrandsRepositoryInterface{
   @override
   Future<List<BrandModel>?> getBrandList({required DataSourceEnum source}) async {
     List<BrandModel>? brandList;
-    String cacheId = '${AppConstants.brandListUri}-${Get.find<SplashController>().module!.id!}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.brandListUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -25,7 +32,7 @@ class BrandsRepository implements BrandsRepositoryInterface{
         if (response.statusCode == 200) {
           brandList = [];
           response.body.forEach((brand) => brandList!.add(BrandModel.fromJson(brand)));
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:

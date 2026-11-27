@@ -57,12 +57,16 @@ class PriceConverter {
   }
 
   static double? convertWithDiscount(double? price, double? discount, String? discountType, {bool isFoodVariation = false}) {
-    if(discountType == 'amount' && !isFoodVariation) {
-      price = price! - discount!;
-    }else if(discountType == 'percent' || discountType == 'percentage') {
-      price = price! - ((discount! / 100) * price);
+    if (price == null) {
+      return null;
     }
-    return price;
+    final double safeDiscount = discount ?? 0;
+    if(discountType == 'amount' && !isFoodVariation) {
+      price = price - safeDiscount;
+    }else if(discountType == 'percent' || discountType == 'percentage') {
+      price = price - ((safeDiscount / 100) * price);
+    }
+    return price < 0 ? 0.0 : price;
   }
 
   static double calculation(double amount, double? discount, String type, int quantity) {

@@ -125,7 +125,9 @@ class StoreCardItem {
         ratingCount: json['rating_count'] as int?,
         veg: json['veg'] as int?,
         stock: json['stock'] as int?,
-        status: json['status'] as int?,
+        status: json['status'] == null
+            ? null
+            : (json['status'] is int ? json['status'] as int : int.tryParse(json['status'].toString())),
         availableTimeStarts: json['available_time_starts'] as String?,
         availableTimeEnds: json['available_time_ends'] as String?,
         imageFullUrl: json['image_full_url'] as String?,
@@ -171,6 +173,7 @@ class StoreCardItem {
         ratingCount: ratingCount,
         veg: veg ?? 0,
         stock: stock,
+        status: status,
         availableTimeStarts: availableTimeStarts,
         availableTimeEnds: availableTimeEnds,
         isStoreHalalActive: halalTagStatus == 1,

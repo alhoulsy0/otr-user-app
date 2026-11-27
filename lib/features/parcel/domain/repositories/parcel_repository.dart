@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/parcel/domain/models/parcel_cancellation_reasons_model.dart';
@@ -32,15 +33,21 @@ class ParcelRepository implements ParcelRepositoryInterface {
 
   Future<VideoContentModel?> _getVideoContentDetails({required DataSourceEnum source}) async {
     VideoContentModel? videoContentDetails;
-    final int? moduleId = Get.find<SplashController>().module?.id;
-    String cacheId = '${AppConstants.videoContentUri}-${moduleId ?? 0}';
+    final int moduleId = Get.find<SplashController>().module?.id ?? 0;
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.videoContentUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: moduleId,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
         Response response = await apiClient.getData(AppConstants.videoContentUri);
         if(response.statusCode == 200) {
           videoContentDetails = VideoContentModel.fromJson(response.body);
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:
@@ -54,15 +61,21 @@ class ParcelRepository implements ParcelRepositoryInterface {
 
   Future<WhyChooseModel?> _getWhyChooseDetails({required DataSourceEnum source}) async {
     WhyChooseModel? whyChooseDetails;
-    final int? moduleId = Get.find<SplashController>().module?.id;
-    String cacheId = '${AppConstants.whyChooseUri}-${moduleId ?? 0}';
+    final int moduleId = Get.find<SplashController>().module?.id ?? 0;
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.whyChooseUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: moduleId,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
         Response response = await apiClient.getData(AppConstants.whyChooseUri);
         if(response.statusCode == 200) {
           whyChooseDetails = WhyChooseModel.fromJson(response.body);
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:

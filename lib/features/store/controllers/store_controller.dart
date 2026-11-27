@@ -861,7 +861,7 @@ class StoreController extends GetxController implements GetxService {
     if(!active) {
       return true;
     }
-    DateTime date = DateTime.now();
+    DateTime date = DateConverter.jordanNow();
     if(!today) {
       date = date.add(const Duration(days: 1));
     }
@@ -881,7 +881,7 @@ class StoreController extends GetxController implements GetxService {
     if(isStoreClosed(true, active, schedules)) {
       return false;
     }
-    int weekday = DateTime.now().weekday;
+    int weekday = DateConverter.jordanNow().weekday;
     if(weekday == 7) {
       weekday = 0;
     }

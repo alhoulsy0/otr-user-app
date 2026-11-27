@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/splash/controllers/splash_controller.dart';
@@ -98,14 +99,26 @@ class StoreRepository implements StoreRepositoryInterface {
   Future<StoreModel?> _getStoreList(int offset, String filterBy, String storeType, {required DataSourceEnum source, String name = ''}) async {
     StoreModel? storeModel;
     final String nameQuery = name.isNotEmpty ? '&search=${Uri.encodeComponent(name)}' : '';
-    String cacheId = '${AppConstants.storeUri}/$filterBy?store_type=$storeType&offset=$offset&limit=12$nameQuery-${Get.find<SplashController>().module?.id??''}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      '${AppConstants.storeUri}/$filterBy',
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: {
+        'store_type': storeType,
+        'offset': offset,
+        'limit': 12,
+        if (name.isNotEmpty) 'search': name,
+      },
+    );
 
     switch(source) {
       case DataSourceEnum.client:
         Response response = await apiClient.getData('${AppConstants.storeUri}/$filterBy?store_type=$storeType&offset=$offset&limit=12$nameQuery', moduleScoped: true);
         if(response.statusCode == 200){
           storeModel = StoreModel.fromJson(response.body);
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:
@@ -120,7 +133,14 @@ class StoreRepository implements StoreRepositoryInterface {
 
   Future<List<Store>?> _getPopularStoreList(String type, {required DataSourceEnum source}) async {
     List<Store>? popularStoreList;
-    String cacheId = '${AppConstants.popularStoreUri}?type=$type&offset=1&limit=50-${Get.find<SplashController>().module?.id??''}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.popularStoreUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: {'type': type, 'offset': 1, 'limit': 50},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -129,7 +149,7 @@ class StoreRepository implements StoreRepositoryInterface {
           popularStoreList = [];
           final List storesJson = response.body['stores'] as List? ?? [];
           for (var store in storesJson) { popularStoreList.add(Store.fromJson(store)); }
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(storesJson), apiClient.getHeader());
+          await LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(storesJson), headers);
         }
 
       case DataSourceEnum.local:
@@ -145,7 +165,14 @@ class StoreRepository implements StoreRepositoryInterface {
 
   Future<List<Store>?> _getLatestStoreList(String type, {required DataSourceEnum source}) async {
     List<Store>? latestStoreList;
-    String cacheId = '${AppConstants.latestStoreUri}?type=$type&offset=1&limit=50-${Get.find<SplashController>().module!.id!}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.latestStoreUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: {'type': type, 'offset': 1, 'limit': 50},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -154,7 +181,7 @@ class StoreRepository implements StoreRepositoryInterface {
           latestStoreList = [];
           final List storesJson = response.body['stores'] as List? ?? [];
           for (var store in storesJson) { latestStoreList.add(Store.fromJson(store)); }
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(storesJson), apiClient.getHeader());
+          await LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(storesJson), headers);
         }
 
       case DataSourceEnum.local:
@@ -170,7 +197,14 @@ class StoreRepository implements StoreRepositoryInterface {
 
   Future<List<Store>?> _getTopOfferStoreList({required DataSourceEnum source, String? filterBy, String? sortBy}) async {
     List<Store>? topOfferStoreList;
-    String cacheId = '${AppConstants.topOfferStoreUri}-${Get.find<SplashController>().module!.id!}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.topOfferStoreUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: {'filterBy': filterBy ?? '', 'sortBy': sortBy ?? ''},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -178,7 +212,7 @@ class StoreRepository implements StoreRepositoryInterface {
         if (response.statusCode == 200) {
           topOfferStoreList = [];
           response.body['stores'].forEach((store) => topOfferStoreList!.add(Store.fromJson(store)));
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body['stores']), apiClient.getHeader());
+          await LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body['stores']), headers);
         }
 
       case DataSourceEnum.local:
@@ -195,9 +229,14 @@ class StoreRepository implements StoreRepositoryInterface {
     List<Store>? featuredStoreList;
     final bool useFeaturedHeader = fromHome
         || (Get.find<SplashController>().module == null && Get.find<SplashController>().configModel!.module == null);
-    final String cacheSuffix = useFeaturedHeader ? 'home' : '${Get.find<SplashController>().module?.id ?? ''}';
-    String cacheId = '${AppConstants.storeUri}/all?featured=1&offset=1&limit=50-$cacheSuffix';
-    Map<String, String> header = useFeaturedHeader ? HeaderHelper.featuredHeader() : apiClient.getHeader();
+    final Map<String, String> header = useFeaturedHeader ? HeaderHelper.featuredHeader() : apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      '${AppConstants.storeUri}/all',
+      zoneId: header[AppConstants.zoneId],
+      languageCode: header[AppConstants.localizationKey],
+      moduleId: useFeaturedHeader ? 'home' : (Get.find<SplashController>().module?.id ?? 0),
+      params: {'featured': 1, 'offset': 1, 'limit': 50},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -208,11 +247,23 @@ class StoreRepository implements StoreRepositoryInterface {
         if (response.statusCode == 200) {
           featuredStoreList = [];
           response.body['stores'].forEach((store) => featuredStoreList!.add(Store.fromJson(store)));
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body['stores']), header);
+          await LocalClient.organize(
+            DataSourceEnum.client,
+            cacheId,
+            jsonEncode(response.body['stores']),
+            header,
+            validateModule: !useFeaturedHeader,
+          );
         }
 
       case DataSourceEnum.local:
-        String? cacheResponseData = await LocalClient.organize(DataSourceEnum.local, cacheId, null, null);
+        String? cacheResponseData = await LocalClient.organize(
+          DataSourceEnum.local,
+          cacheId,
+          null,
+          header,
+          validateModule: !useFeaturedHeader,
+        );
         if(cacheResponseData != null) {
           featuredStoreList = [];
           jsonDecode(cacheResponseData).forEach((store) => featuredStoreList!.add(Store.fromJson(store)));
@@ -223,7 +274,13 @@ class StoreRepository implements StoreRepositoryInterface {
 
   Future<List<Store>?> _getVisitAgainStoreList({required DataSourceEnum source}) async {
     List<Store>? visitAgainStoreList;
-    String cacheId = '${AppConstants.visitAgainStoreUri}-${ModuleHelper.getModule()?.id}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.visitAgainStoreUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: ModuleHelper.getModule()?.id ?? 0,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -231,7 +288,7 @@ class StoreRepository implements StoreRepositoryInterface {
         if (response.statusCode == 200) {
           visitAgainStoreList = [];
           response.body.forEach((store) => visitAgainStoreList!.add(Store.fromJson(store)));
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:
@@ -329,7 +386,14 @@ class StoreRepository implements StoreRepositoryInterface {
 
   Future<List<Store>?> _getRecommendedStoreList({required DataSourceEnum source}) async {
     List<Store>? recommendedStoreList;
-    String cacheId = '${AppConstants.recommendedStoreUri}/all?featured=1&offset=1&limit=50-${Get.find<SplashController>().module?.id??''}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.recommendedStoreUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: {'offset': 1, 'limit': 50},
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -338,7 +402,7 @@ class StoreRepository implements StoreRepositoryInterface {
           recommendedStoreList = [];
           final List storesJson = response.body['stores'] as List? ?? [];
           for (var store in storesJson) { recommendedStoreList.add(Store.fromJson(store)); }
-          LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(storesJson), apiClient.getHeader());
+          await LocalClient.organize(DataSourceEnum.client, cacheId, jsonEncode(storesJson), headers);
         }
 
       case DataSourceEnum.local:

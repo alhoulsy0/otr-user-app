@@ -1763,10 +1763,20 @@ class _StoreCompactItemCard extends StatelessWidget {
     // (CartCountView, CustomFavouriteWidget) and item navigation — each re-fetches
     // full details by id, so the minimal Item is sufficient.
     final Item item = data.toItem();
+    final double startingPrice = Get.isRegistered<ItemController>()
+        ? (Get.find<ItemController>().getStartingPrice(item) ?? item.price ?? 0)
+        : (item.price ?? 0);
     final double discount = item.discount ?? 0;
     final bool hasDiscount = discount > 0;
     final bool hasFreeDelivery = store.delivery == true && store.freeDelivery == true;
-    final bool isAvailable = DateConverter.isAvailable(item.availableTimeStarts, item.availableTimeEnds);
+    final bool stockEnabled = Get.isRegistered<SplashController>()
+        ? (Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false)
+        : false;
+    final bool isStatusInactive = item.status == 0;
+    final bool isOutOfStock = stockEnabled && item.stock != null && item.stock! <= 0;
+    final bool isTimeAvailable = DateConverter.isAvailable(item.availableTimeStarts, item.availableTimeEnds);
+    final bool isAvailable = !isStatusInactive && !isOutOfStock && isTimeAvailable;
+    final bool showQuickAdd = isAvailable || (!isStatusInactive && !isOutOfStock && (item.scheduleOrder ?? false));
 
     return InkWell(
       onTap: () => Get.find<ItemController>().navigateToItemPage(item, context, inStore: true, isCampaign: false, ),
@@ -1786,14 +1796,14 @@ class _StoreCompactItemCard extends StatelessWidget {
                 if (AvgReviewWidget.showRating(item.avgRating ?? 0)) const SizedBox(height: 9),
                 Row(children: [
                   Text(
-                    PriceConverter.convertPrice(item.price, discount: item.discount, discountType: item.discountType),
+                    PriceConverter.convertPrice(startingPrice, discount: item.discount, discountType: item.discountType),
                     textDirection: TextDirection.ltr,
                     style: robotoBold.copyWith(fontSize: Dimensions.fontSizeDefault),
                   ),
                   if (hasDiscount) ...[
                     const SizedBox(width: 6),
                     Flexible(child: Text(
-                      PriceConverter.convertPrice(item.price),
+                      PriceConverter.convertPrice(startingPrice),
                       textDirection: TextDirection.ltr,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1835,7 +1845,7 @@ class _StoreCompactItemCard extends StatelessWidget {
                     },
                   ),
                 ),
-                if(isAvailable) Positioned(right: 7, bottom: 7,
+                if(showQuickAdd) Positioned(right: 7, bottom: 7,
                   child: CartCountView(item: item, index: index, child: const _AddSquareButton(size: 36)),
                 ),
 
@@ -1850,7 +1860,7 @@ class _StoreCompactItemCard extends StatelessWidget {
 
   String _discountBadgeText(Item item) {
     final double discount = item.discount ?? 0;
-    if (item.discountType == 'percent') {return '-${discount.toStringAsFixed(discount % 1 == 0 ? 0 : 1)}%';}
+    if (item.discountType == 'percent' || item.discountType == 'percentage') {return '-${discount.toStringAsFixed(discount % 1 == 0 ? 0 : 1)}%';}
     return '-${PriceConverter.convertPrice(discount)}';
   }
 }

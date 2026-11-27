@@ -117,10 +117,13 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
               int? cartId = cartController.getCartId(itemController.cartIndex);
               if (item != null && itemController.variationIndex != null) {
                 List<String> variationList = [];
-                for (int index = 0; index < item.choiceOptions!.length; index++) {
-                  variationList.add(
-                    item.choiceOptions![index].options![itemController.variationIndex![index]].replaceAll(' ', ''),
-                  );
+                final List<ChoiceOptions> choiceOptions = item.choiceOptions ?? const [];
+                for (int index = 0; index < choiceOptions.length; index++) {
+                  final int selectedOpt = itemController.variationIndex!.length > index ? itemController.variationIndex![index] : -1;
+                  final List<String> options = choiceOptions[index].options ?? const [];
+                  if (selectedOpt >= 0 && selectedOpt < options.length) {
+                    variationList.add(options[selectedOpt].replaceAll(' ', ''));
+                  }
                 }
                 String variationType = '';
                 bool isFirst = true;
@@ -136,38 +139,40 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                 double? price = item.price;
                 Variation? variation;
                 stock = item.stock ?? 0;
-                for (Variation v in item.variations!) {
+                for (Variation v in (item.variations ?? const [])) {
                   if (v.type == variationType) {
-                    price = v.price;
+                    price = v.price ?? price;
                     variation = v;
-                    stock = v.stock;
+                    stock = v.stock ?? stock;
                     break;
                   }
                 }
 
+                final double safePrice = price ?? 0;
                 double? discount = item.discount;
                 String? discountType = item.discountType;
-                double priceWithDiscount = PriceConverter.convertWithDiscount(price, discount, discountType)!;
-                double priceWithQuantity = priceWithDiscount * itemController.quantity!;
+                double priceWithDiscount = PriceConverter.convertWithDiscount(safePrice, discount ?? 0, discountType) ?? safePrice;
+                double priceWithQuantity = priceWithDiscount * (itemController.quantity ?? 1);
                 double addonsCost = 0;
                 List<AddOn> addOnIdList = [];
                 List<AddOns> addOnsList = [];
-                for (int index = 0; index < item.addOns!.length; index++) {
-                  if (itemController.addOnActiveList[index]) {
-                    addonsCost = addonsCost + (item.addOns![index].price! * itemController.addOnQtyList[index]!);
+                final List<AddOns> itemAddOns = item.addOns ?? const [];
+                for (int index = 0; index < itemAddOns.length; index++) {
+                  if (itemController.addOnActiveList.length > index && itemController.addOnActiveList[index]) {
+                    addonsCost = addonsCost + ((itemAddOns[index].price ?? 0) * (itemController.addOnQtyList[index] ?? 1));
                     addOnIdList.add(
                       AddOn(
-                        id: item.addOns![index].id,
+                        id: itemAddOns[index].id,
                         quantity: itemController.addOnQtyList[index],
                       ),
                     );
-                    addOnsList.add(item.addOns![index]);
+                    addOnsList.add(itemAddOns[index]);
                   }
                 }
 
                 cartModel = CartModel(
-                  null, price, priceWithDiscount, variation != null ? [variation] : [], [],
-                  (price! - PriceConverter.convertWithDiscount(price, discount, discountType)!),
+                  null, safePrice, priceWithDiscount, variation != null ? [variation] : [], [],
+                  (safePrice - priceWithDiscount),
                   itemController.quantity, addOnIdList, addOnsList, item.availableDateStarts != null, stock,
                   item, item.quantityLimit
                 );
@@ -180,7 +185,7 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                   null, itemController.cartIndex != -1 ? cartController.cartList[itemController.cartIndex].quantity : itemController.quantity,
                   listOfAddOnId, addOnsList, listOfAddOnQty, 'Item',
                 );
-                priceWithAddons = priceWithQuantity + (Get.find<SplashController>().configModel!.moduleConfig!.module!.addOn! ? addonsCost : 0);
+                priceWithAddons = priceWithQuantity + ((Get.find<SplashController>().configModel?.moduleConfig?.module?.addOn ?? false) ? addonsCost : 0);
               }
 
               final String? stockIndicateText = (item != null && (stock ?? 0) > 0 &&
@@ -340,11 +345,11 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                                                       _ItemTitleSection(
                                                         item: item,
                                                         isCampaign: item.availableDateStarts != null,
-                                                        isOutOfStock: Get.find<SplashController>().configModel!.moduleConfig!.module!.stock! && (stock ?? 0) <= 0,
+                                                        isOutOfStock: (Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false) && (stock ?? 0) <= 0,
                                                         stockIndicateText: stockIndicateText,
                                                       ),
 
-                                                      if (item.isPrescriptionRequired!)
+                                                      if (item.isPrescriptionRequired ?? false)
                                                         Container(
                                                           width: double.infinity,
                                                           padding: const EdgeInsets.symmetric(
@@ -365,9 +370,9 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                                                           ),
                                                         ),
 
-                                                      if (item.choiceOptions!.isNotEmpty)
+                                                      if (item.choiceOptions?.isNotEmpty ?? false)
                                                         const SizedBox(height: Dimensions.paddingSizeDefault),
-                                                      if (item.choiceOptions!.isNotEmpty)
+                                                      if (item.choiceOptions?.isNotEmpty ?? false)
                                                         _VariationSection(
                                                           item: item,
                                                           controller: itemController,
@@ -436,12 +441,15 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                                   ),
                                   child: GetBuilder<CartController>(
                                     builder: (cartController) {
-                                      bool isAvailable = DateConverter.isAvailable(
-                                            item.availableTimeStarts,
-                                            item.availableTimeEnds,
-                                          );
+                                      final bool isTimeAvailable = DateConverter.isAvailable(
+                                        item.availableTimeStarts,
+                                        item.availableTimeEnds,
+                                      );
+                                      final bool isStatusInactive = item.status == 0;
+                                      final bool blockOrdering = isStatusInactive ||
+                                          (!isTimeAvailable && (item.availableDateStarts != null || item.scheduleOrder != true));
 
-                                      return (item.availableDateStarts != null && !isAvailable)
+                                      return blockOrdering
                                           ? Container(
                                               alignment: Alignment.center,
                                               padding: const EdgeInsets.all(
@@ -461,11 +469,14 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                                                       fontSize: Dimensions.fontSizeLarge,
                                                     ),
                                                   ),
-                                                  Text(
-                                                    '${'available_will_be'.tr} ${DateConverter.convertTimeToTime(item.availableTimeStarts!)} '
-                                                    '- ${DateConverter.convertTimeToTime(item.availableTimeEnds!)}',
-                                                    style: robotoRegular,
-                                                  ),
+                                                  if (!isStatusInactive &&
+                                                      (item.availableTimeStarts?.isNotEmpty ?? false) &&
+                                                      (item.availableTimeEnds?.isNotEmpty ?? false))
+                                                    Text(
+                                                      '${'available_will_be'.tr} ${DateConverter.convertTimeToTime(item.availableTimeStarts!)} '
+                                                      '- ${DateConverter.convertTimeToTime(item.availableTimeEnds!)}',
+                                                      style: robotoRegular,
+                                                    ),
                                                 ],
                                               ),
                                             )
@@ -658,117 +669,73 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
                                                               Dimensions
                                                                   .paddingSizeSmall,
                                                             ),
-                                                        child: CustomButton(
-                                                          isLoading:
-                                                              cartController
-                                                                  .isLoading,
-                                                          buttonText:
-                                                              (Get.find<
-                                                                        SplashController
-                                                                      >()
-                                                                      .configModel!
-                                                                      .moduleConfig!
-                                                                      .module!
-                                                                      .stock! &&
-                                                                  stock! <= 0)
-                                                              ? 'out_of_stock'
-                                                                    .tr
-                                                              : item.availableDateStarts !=
-                                                                    null
-                                                              ? 'order_now'.tr
-                                                              : itemController
-                                                                        .cartIndex !=
-                                                                    -1
-                                                              ? 'update_in_cart'
-                                                                    .tr
-                                                              : 'add_to_cart'
-                                                                    .tr,
-                                                          onPressed:
-                                                              (!Get.find<
-                                                                        SplashController
-                                                                      >()
-                                                                      .configModel!
-                                                                      .moduleConfig!
-                                                                      .module!
-                                                                      .stock! ||
-                                                                  stock! > 0)
-                                                              ? () async {
-                                                                  if (AddressHelper.getUserAddressFromSharedPref() ==
-                                                                      null) {
-                                                                    Get.find<
-                                                                          LocationController
-                                                                        >()
-                                                                        .navigateToLocationScreen(
+                                                        child: Builder(
+                                                          builder: (context) {
+                                                            final bool stockEnabled = Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false;
+                                                            final bool isOutOfStock = stockEnabled && (stock ?? 0) <= 0;
+                                                            return CustomButton(
+                                                              isLoading: cartController.isLoading,
+                                                              buttonText: isOutOfStock
+                                                                  ? 'out_of_stock'.tr
+                                                                  : item.availableDateStarts != null
+                                                                  ? 'order_now'.tr
+                                                                  : itemController.cartIndex != -1
+                                                                  ? 'update_in_cart'.tr
+                                                                  : 'add_to_cart'.tr,
+                                                              onPressed: !isOutOfStock
+                                                                  ? () async {
+                                                                      if (AddressHelper.getUserAddressFromSharedPref() == null) {
+                                                                        Get.find<LocationController>().navigateToLocationScreen(
                                                                           'home',
-                                                                          canRoute:
-                                                                              true,
+                                                                          canRoute: true,
                                                                         );
-                                                                    return;
-                                                                  }
+                                                                        return;
+                                                                      }
 
-                                                                  if (!Get.find<
-                                                                            SplashController
-                                                                          >()
-                                                                          .configModel!
-                                                                          .moduleConfig!
-                                                                          .module!
-                                                                          .stock! ||
-                                                                      stock! >
-                                                                          0) {
-                                                                    if (item.availableDateStarts !=
-                                                                        null) {
-                                                                      Get.toNamed(
-                                                                        RouteHelper.getCheckoutRoute(
-                                                                          'campaign',
-                                                                        ),
-                                                                        arguments: CheckoutScreen(
-                                                                          storeId:
-                                                                              null,
-                                                                          fromCart:
-                                                                              false,
-                                                                          cartList: [
-                                                                            cartModel,
-                                                                          ],
-                                                                        ),
-                                                                      );
-                                                                    } else {
-                                                                      if (itemController
-                                                                              .cartIndex ==
-                                                                          -1) {
-                                                                        await cartController
-                                                                            .addToCartOnline(
-                                                                              cart!,
-                                                                              storeId: item.storeId,
-                                                                            )
-                                                                            .then((
-                                                                              success,
-                                                                            ) {
-                                                                              if (success) {
-                                                                                itemController.setExistInCart(
-                                                                                  item,
-                                                                                  null,
-                                                                                );
-                                                                                showCartSnackBar();
-                                                                              }
-                                                                            });
-                                                                      } else {
-                                                                        await cartController
-                                                                            .updateCartOnline(
-                                                                              cart!,
-                                                                              storeId: item.storeId,
-                                                                            )
-                                                                            .then((
-                                                                              success,
-                                                                            ) {
-                                                                              if (success) {
-                                                                                showCartSnackBar();
-                                                                              }
-                                                                            });
+                                                                      if (!isOutOfStock) {
+                                                                        if (item.availableDateStarts != null) {
+                                                                          Get.toNamed(
+                                                                            RouteHelper.getCheckoutRoute('campaign'),
+                                                                            arguments: CheckoutScreen(
+                                                                              storeId: null,
+                                                                              fromCart: false,
+                                                                              cartList: [cartModel],
+                                                                            ),
+                                                                          );
+                                                                        } else {
+                                                                          if (itemController.cartIndex == -1) {
+                                                                            await cartController
+                                                                                .addToCartOnline(
+                                                                                  cart!,
+                                                                                  storeId: item.storeId,
+                                                                                )
+                                                                                .then((success) {
+                                                                                  if (success) {
+                                                                                    itemController.setExistInCart(
+                                                                                      item,
+                                                                                      null,
+                                                                                    );
+                                                                                    showCartSnackBar();
+                                                                                  }
+                                                                                });
+                                                                          } else {
+                                                                            await cartController
+                                                                                .updateCartOnline(
+                                                                                  cart!,
+                                                                                  storeId: item.storeId,
+                                                                                )
+                                                                                .then((success) {
+                                                                                  if (success) {
+                                                                                    showCartSnackBar();
+                                                                                  }
+                                                                                });
+                                                                          }
+                                                                        }
                                                                       }
                                                                     }
-                                                                  }
-                                                                }
-                                                              : null,
+                                                                  : null,
+                                                            );
+                                                          },
                                                         ),
                                                       ),
                                                     ),
@@ -809,33 +776,36 @@ class _ItemDetailsNewScreenState extends State<ItemDetailsNewScreen> {
   double _getItemDetailsDiscountPrice({required CartModel cart}) {
     double discountedPrice = 0;
 
-    double? discount = cart.item!.discount;
-    String? discountType = cart.item!.discountType;
-    String variationType = cart.variation != null && cart.variation!.isNotEmpty
-        ? cart.variation![0].type!
+    final double safeDiscount = cart.item?.discount ?? 0;
+    final String? discountType = cart.item?.discountType;
+    final String variationType = cart.variation != null && cart.variation!.isNotEmpty
+        ? (cart.variation![0].type ?? '')
         : '';
+    final int qty = cart.quantity ?? 1;
 
     if (cart.variation != null && cart.variation!.isNotEmpty) {
-      for (Variation variation in cart.item!.variations!) {
+      for (Variation variation in (cart.item?.variations ?? const [])) {
         if (variation.type == variationType) {
+          final double varPrice = variation.price ?? 0;
           discountedPrice =
               (PriceConverter.convertWithDiscount(
-                variation.price!,
-                discount,
+                varPrice,
+                safeDiscount,
                 discountType,
-              )! *
-              cart.quantity!);
+              ) ?? varPrice) *
+              qty;
           break;
         }
       }
     } else {
+      final double basePrice = cart.item?.price ?? 0;
       discountedPrice =
           (PriceConverter.convertWithDiscount(
-            cart.item!.price!,
-            discount,
+            basePrice,
+            safeDiscount,
             discountType,
-          )! *
-          cart.quantity!);
+          ) ?? basePrice) *
+          qty;
     }
 
     return discountedPrice;
@@ -941,39 +911,43 @@ class _ItemTitleSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    double? startingPrice;
+    double? startingPrice = item.price;
     double? endingPrice;
-    if (item.variations!.isNotEmpty) {
-      List<double?> priceList = [];
-      for (var variation in item.variations!) {
-        priceList.add(variation.price);
+    if ((item.choiceOptions?.isNotEmpty ?? false) &&
+        (item.foodVariations?.isEmpty ?? true) &&
+        (item.variations?.isNotEmpty ?? false)) {
+      final List<double> priceList = item.variations!
+          .map((variation) => variation.price)
+          .whereType<double>()
+          .toList()
+        ..sort();
+      if (priceList.isNotEmpty) {
+        startingPrice = priceList.first;
+        if (priceList.first < priceList.last) {
+          endingPrice = priceList.last;
+        }
       }
-      priceList.sort((a, b) => a!.compareTo(b!));
-      startingPrice = priceList[0];
-      if (priceList[0]! < priceList[priceList.length - 1]!) {
-        endingPrice = priceList[priceList.length - 1];
-      }
-    } else {
-      startingPrice = item.price;
     }
+    final double safeStartingPrice = startingPrice ?? 0;
 
-    double? discount = item.discount;
-    String? discountType = item.discountType;
-    final bool hasFreeDelivery = item.freeDelivery ?? (Get.find<StoreController>().store?.freeDelivery ?? false);
+    final double safeDiscount = item.discount ?? 0;
+    final String? discountType = item.discountType;
+    final bool hasFreeDelivery = item.freeDelivery ?? (Get.isRegistered<StoreController>() ? (Get.find<StoreController>().store?.freeDelivery ?? false) : false);
     print("=======>>> $hasFreeDelivery @@@===");
 
     final List<String> tags = [];
     if (item.organic == 1 && item.moduleType == 'grocery') {
       tags.add('organic');
     }
-    if (item.isStoreHalalActive! && item.isHalalItem!) {
+    if ((item.isStoreHalalActive ?? false) && (item.isHalalItem ?? false)) {
       tags.add('halal');
     }
-    if ((Get.find<SplashController>().configModel!.moduleConfig!.module!.unit! && item.unitType != null) ||
-        (Get.find<SplashController>().configModel!.moduleConfig!.module!.vegNonVeg! &&
-            Get.find<SplashController>().configModel!.toggleVegNonVeg!)) {
+    final module = Get.find<SplashController>().configModel?.moduleConfig?.module;
+    if (((module?.unit ?? false) && item.unitType != null) ||
+        ((module?.vegNonVeg ?? false) &&
+            (Get.find<SplashController>().configModel?.toggleVegNonVeg ?? false))) {
       tags.add(
-        Get.find<SplashController>().configModel!.moduleConfig!.module!.unit!
+        (module?.unit ?? false)
             ? item.unitType ?? ''
             : item.veg == 0
             ? 'non_veg'
@@ -981,11 +955,11 @@ class _ItemTitleSection extends StatelessWidget {
       );
     }
 
-    final String currencySymbol = Get.find<SplashController>().configModel!.currencySymbol ?? '';
-    final String discountLabel = discount! > 0
-        ? (discountType == 'percent'
-              ? '-${discount.toInt()}%'
-              : '-$currencySymbol${discount.toInt()}')
+    final String currencySymbol = Get.find<SplashController>().configModel?.currencySymbol ?? '';
+    final String discountLabel = safeDiscount > 0
+        ? ((discountType == 'percent' || discountType == 'percentage')
+              ? '-${safeDiscount.toStringAsFixed(safeDiscount.truncateToDouble() == safeDiscount ? 0 : 1)}%'
+              : '-$currencySymbol${safeDiscount.toStringAsFixed(safeDiscount.truncateToDouble() == safeDiscount ? 0 : 1)}')
         : '';
 
     return Column(
@@ -1010,23 +984,23 @@ class _ItemTitleSection extends StatelessWidget {
             ),
           ),
 
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: Dimensions.paddingSizeSmall,
+          runSpacing: 2,
           children: [
             Text(
-              '${PriceConverter.convertPrice(startingPrice, discount: discount, discountType: discountType)}'
-              '${endingPrice != null ? ' - ${PriceConverter.convertPrice(endingPrice, discount: discount, discountType: discountType)}' : ''}',
+              '${PriceConverter.convertPrice(safeStartingPrice, discount: safeDiscount, discountType: discountType)}'
+              '${endingPrice != null ? ' - ${PriceConverter.convertPrice(endingPrice, discount: safeDiscount, discountType: discountType)}' : ''}',
               style: robotoBold.copyWith(
                 color: Theme.of(context).textTheme.bodyLarge!.color,
                 fontSize: Dimensions.fontSizeExtraLarge,
               ),
               textDirection: TextDirection.ltr,
             ),
-            const SizedBox(width: Dimensions.paddingSizeSmall),
-
-            if (discount > 0)
+            if (safeDiscount > 0)
               Text(
-                '${PriceConverter.convertPrice(startingPrice)}'
+                '${PriceConverter.convertPrice(safeStartingPrice)}'
                 '${endingPrice != null ? ' - ${PriceConverter.convertPrice(endingPrice)}' : ''}',
                 textDirection: TextDirection.ltr,
                 style: robotoRegular.copyWith(
@@ -1043,7 +1017,7 @@ class _ItemTitleSection extends StatelessWidget {
           spacing: Dimensions.paddingSizeSmall,
           runSpacing: Dimensions.paddingSizeExtraSmall,
           children: [
-            if (discount > 0)
+            if (safeDiscount > 0)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: Dimensions.paddingSizeSmall,
@@ -1331,9 +1305,11 @@ class _ExpandableCardState extends State<_ExpandableCard> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
-        child: Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
+        child: Material(
+          type: MaterialType.transparency,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
             initiallyExpanded: widget.initiallyExpanded,
             onExpansionChanged: (value) => setState(() => _expanded = value),
             tilePadding: const EdgeInsets.symmetric(
@@ -1366,6 +1342,7 @@ class _ExpandableCardState extends State<_ExpandableCard> {
               ),
             ),
             children: [widget.child],
+          ),
           ),
         ),
       ),

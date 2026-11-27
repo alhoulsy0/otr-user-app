@@ -51,6 +51,11 @@ class WebItemWidget extends StatelessWidget {
         genericName += name;
       }
     }
+    final bool stockEnabled = Get.isRegistered<SplashController>()
+        ? (Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false)
+        : false;
+    bool isStatusInactive = false;
+    bool isOutOfStock = false;
     if(isStore) {
       discount = store!.discount != null ? store!.discount!.discount : 0;
       discountType = store!.discount != null ? store!.discount!.discountType : 'percent';
@@ -58,8 +63,16 @@ class WebItemWidget extends StatelessWidget {
     }else {
       discount = item!.discount;
       discountType = item!.discountType;
-      isAvailable = DateConverter.isAvailable(item!.availableTimeStarts, item!.availableTimeEnds);
+      isStatusInactive = item!.status == 0;
+      isOutOfStock = stockEnabled && item!.stock != null && item!.stock! <= 0;
+      final bool isTimeAvailable = DateConverter.isAvailable(item!.availableTimeStarts, item!.availableTimeEnds);
+      isAvailable = !isStatusInactive && !isOutOfStock && isTimeAvailable;
     }
+    final bool showQuickAdd = !isStore && (isAvailable || (!isStatusInactive && !isOutOfStock && (item!.scheduleOrder ?? false)));
+
+    final double? startingPrice = isStore
+        ? null
+        : (Get.find<ItemController>().getStartingPrice(item!) ?? item!.price);
 
     return TextHover(
       builder: (hovered) {
@@ -125,7 +138,7 @@ class WebItemWidget extends StatelessWidget {
 
                         !isStore ? OrganicTag(item: item!, placeInImage: false, placeTop: false) : const SizedBox(),
 
-                        isStore ? const SizedBox() : Positioned(bottom: 10, right: 10, child: CartCountView(item: item!, index: index)),
+                        !showQuickAdd ? const SizedBox() : Positioned(bottom: 10, right: 10, child: CartCountView(item: item!, index: index)),
 
                         isAvailable ? const SizedBox() : NotAvailableWidget(isStore: isStore),
                       ]),
@@ -148,7 +161,7 @@ class WebItemWidget extends StatelessWidget {
                                 isStore && store?.verifiedSeller == 1 ? Image.asset(Images.verifiedBadge, width: 13, height: 13) : const SizedBox.shrink(),
                                 const SizedBox(width: Dimensions.paddingSizeExtraSmall),
 
-                                (Get.find<SplashController>().configModel!.moduleConfig!.module!.vegNonVeg! && Get.find<SplashController>().configModel!.toggleVegNonVeg!)
+                                ((Get.find<SplashController>().configModel?.moduleConfig?.module?.vegNonVeg ?? false) && (Get.find<SplashController>().configModel?.toggleVegNonVeg ?? false))
                                     ? Image.asset(item != null && item!.veg == 0 ? Images.nonVegImage : Images.vegImage,
                                     height: 10, width: 10, fit: BoxFit.contain) : const SizedBox(),
                               ]),
@@ -191,13 +204,13 @@ class WebItemWidget extends StatelessWidget {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      PriceConverter.convertPrice(item!.price, discount: discount, discountType: discountType),
+                                      PriceConverter.convertPrice(startingPrice ?? item!.price ?? 0, discount: discount, discountType: discountType),
                                       style: robotoMedium.copyWith(fontSize: Dimensions.fontSizeExtraSmall), textDirection: TextDirection.ltr,
                                     ),
-                                    SizedBox(width: discount! > 0 ? Dimensions.paddingSizeExtraSmall : 0),
+                                    SizedBox(width: (discount ?? 0) > 0 ? Dimensions.paddingSizeExtraSmall : 0),
 
-                                    discount > 0 ? Text(
-                                      PriceConverter.convertPrice(item!.price),
+                                    (discount ?? 0) > 0 ? Text(
+                                      PriceConverter.convertPrice(startingPrice ?? item!.price ?? 0),
                                       style: robotoMedium.copyWith(
                                         fontSize: Dimensions.fontSizeOverSmall,
                                         color: Theme.of(context).disabledColor,
@@ -219,7 +232,7 @@ class WebItemWidget extends StatelessWidget {
                                       const Icon(Icons.star, color: Colors.orange, size: 12),
                                       const SizedBox(width: Dimensions.paddingSizeExtraSmall),
                                       Text(
-                                        item!.ratingCount.toString(),
+                                        (item!.ratingCount ?? 0).toString(),
                                         style: robotoRegular.copyWith(fontSize: Dimensions.fontSizeOverSmall, color: Theme.of(context).primaryColor),
                                       ),
                                     ],

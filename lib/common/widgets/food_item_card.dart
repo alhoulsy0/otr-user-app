@@ -64,9 +64,19 @@ class FoodItemCard extends StatelessWidget {
     final Color titleColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
     final bool showHalal = (data.isStoreHalalActive ?? false) && (data.isHalalItem ?? false);
     final bool showOrganic = (data.organic == 1 && data.moduleType == 'grocery');
-    final bool showVeg = Get.find<SplashController>().configModel!.moduleConfig!.module!.vegNonVeg! && Get.find<SplashController>().configModel!.toggleVegNonVeg! && data.veg == 1;
+    final bool showVeg = (Get.find<SplashController>().configModel?.moduleConfig?.module?.vegNonVeg ?? false) &&
+        (Get.find<SplashController>().configModel?.toggleVegNonVeg ?? false) &&
+        data.veg == 1;
     // final bool showNonVeg = Get.find<SplashController>().configModel!.moduleConfig!.module!.vegNonVeg! && Get.find<SplashController>().configModel!.toggleVegNonVeg! && data.veg == 0;
-    final bool isAvailable = DateConverter.isAvailable(data.availableTimeStarts, data.availableTimeEnds);
+    final bool stockEnabled = Get.isRegistered<SplashController>()
+        ? (Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false)
+        : false;
+    final bool isStatusInactive = data.status == 0;
+    final bool isOutOfStock = stockEnabled && data.stock != null && data.stock! <= 0;
+    final bool isTimeAvailable = DateConverter.isAvailable(data.availableTimeStarts, data.availableTimeEnds);
+    final bool isAvailable = !isStatusInactive && !isOutOfStock && isTimeAvailable;
+    final bool showQuickAdd = isAvailable || (!isStatusInactive && !isOutOfStock && (data.scheduleOrder ?? false));
+    final double? startingPrice = Get.find<ItemController>().getStartingPrice(data) ?? data.price;
 
     return CustomInkWell(
       onTap: () => _handleTap(context),
@@ -105,7 +115,7 @@ class FoodItemCard extends StatelessWidget {
                   ]),
                 ),
 
-                Positioned(
+                if(showQuickAdd) Positioned(
                   right: Dimensions.paddingSizeSmall,
                   bottom: Dimensions.paddingSizeSmall,
                   child: CartCountView(
@@ -157,7 +167,7 @@ class FoodItemCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if(data.avgRating! > 0)...[
+                    if((data.avgRating ?? 0) > 0)...[
                       Icon(
                         Icons.star_rounded,
                         size: Dimensions.fontSizeSmall,
@@ -192,7 +202,7 @@ class FoodItemCard extends StatelessWidget {
                   spacing: 8, alignment: WrapAlignment.start,
                   children: [
                     Text(
-                      PriceConverter.convertPrice(data.price, discount: data.discount, discountType: data.discountType),
+                      PriceConverter.convertPrice(startingPrice ?? 0, discount: data.discount, discountType: data.discountType),
                       textDirection: TextDirection.ltr,
                       style: robotoBold.copyWith(
                         color: titleColor,
@@ -201,7 +211,7 @@ class FoodItemCard extends StatelessWidget {
                     ),
                     if (data.discount != null && data.discount! > 0)
                       Text(
-                        PriceConverter.convertPrice(data.price),
+                        PriceConverter.convertPrice(startingPrice ?? 0),
                         textDirection: TextDirection.ltr,
                         style: robotoRegular.copyWith(
                           color: Theme.of(context).disabledColor,
@@ -215,7 +225,7 @@ class FoodItemCard extends StatelessWidget {
                 ...[
                   const SizedBox(height: Dimensions.paddingSizeExtraSmall),
                   Wrap(spacing: Dimensions.paddingSizeExtraSmall, runSpacing: Dimensions.paddingSizeExtraSmall, children: [
-                    if(data.discount != null && data.discount != 0.0) OfferCardWidget(label: '-${data.discount}${data.discountType == "percent" ? "%" : Get.find<SplashController>().configModel!.currencySymbol ?? "\$"}', isHilight: true, textDirection: TextDirection.ltr,),
+                    if(data.discount != null && data.discount != 0.0) OfferCardWidget(label: '-${data.discount}${(data.discountType == "percent" || data.discountType == "percentage") ? "%" : (Get.find<SplashController>().configModel?.currencySymbol ?? "\$")}', isHilight: true, textDirection: TextDirection.ltr,),
                     if(data.freeDelivery ?? false) const OfferCardWidget(label: 'Free',iconData: Icons.pedal_bike_rounded,),
                     if(data.offerLabel != null) OfferCardWidget(label: data.offerLabel! ,iconData: Icons.discount_outlined,),
                   ]),

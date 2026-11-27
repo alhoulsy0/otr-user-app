@@ -122,6 +122,7 @@ class Item {
   String? offerLabel;
   int? brandId;
   String? brandName;
+  int? status;
 
   Item({
     this.id,
@@ -183,6 +184,7 @@ class Item {
     this.offerLabel,
     this.brandId,
     this.brandName,
+    this.status,
   });
 
   Item.fromJson(Map<String, dynamic> json) {
@@ -247,9 +249,9 @@ class Item {
         choiceOptions!.add(ChoiceOptions.fromJson(v));
       });
     }
-    price = json['price'].toDouble();
+    price = json['price']?.toDouble();
     tax = json['tax']?.toDouble();
-    discount = json['discount'].toDouble();
+    discount = json['discount']?.toDouble();
     discountType = json['discount_type'];
     availableTimeStarts = json['available_time_starts'];
     availableTimeEnds = json['available_time_ends'];
@@ -285,6 +287,7 @@ class Item {
     offerLabel = json['offer_label'];
     brandId = json['brand_id'];
     brandName = json['brand_name'];
+    status = json['status'] is String ? int.tryParse(json['status']) : json['status'];
   }
 
   Map<String, dynamic> toJson() {
@@ -360,6 +363,7 @@ class Item {
     data['offer_label'] = offerLabel;
     data['brand_id'] = brandId;
     data['brand_name'] = brandName;
+    data['status'] = status;
     return data;
   }
 }

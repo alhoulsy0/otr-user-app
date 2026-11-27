@@ -59,6 +59,11 @@ class ItemWidget extends StatelessWidget {
         genericName += name;
       }
     }
+    final bool stockEnabled = Get.isRegistered<SplashController>()
+        ? (Get.find<SplashController>().configModel?.moduleConfig?.module?.stock ?? false)
+        : false;
+    bool isStatusInactive = false;
+    bool isOutOfStock = false;
     if(isStore) {
       discount = store!.discount != null ? store!.discount!.discount : 0;
       discountType = store!.discount != null ? store!.discount!.discountType : 'percent';
@@ -66,8 +71,18 @@ class ItemWidget extends StatelessWidget {
     }else {
       discount = item!.discount;
       discountType = item!.discountType;
-      isAvailable = DateConverter.isAvailable(item!.availableTimeStarts, item!.availableTimeEnds);
+      isStatusInactive = item!.status == 0;
+      isOutOfStock = stockEnabled && item!.stock != null && item!.stock! <= 0;
+      final bool isTimeAvailable = DateConverter.isAvailable(item!.availableTimeStarts, item!.availableTimeEnds);
+      isAvailable = !isStatusInactive && !isOutOfStock && isTimeAvailable;
     }
+    final bool showQuickAdd = isStore
+        ? item != null
+        : (isAvailable || (!isStatusInactive && !isOutOfStock && (item!.scheduleOrder ?? false)));
+
+    final double? startingPrice = isStore
+        ? null
+        : (Get.find<ItemController>().getStartingPrice(item!) ?? item!.price);
 
     return Stack(
       children: [
@@ -164,18 +179,18 @@ class ItemWidget extends StatelessWidget {
                             isStore ? store?.verifiedSeller == 1 ? Image.asset(Images.verifiedBadge, width: 16, height: 16) : const SizedBox.shrink() : const SizedBox.shrink(),
                             const SizedBox(width: Dimensions.paddingSizeExtraSmall),
 
-                            (!isStore && Get.find<SplashController>().configModel!.moduleConfig!.module!.vegNonVeg! && Get.find<SplashController>().configModel!.toggleVegNonVeg!)
+                            (!isStore && (Get.find<SplashController>().configModel?.moduleConfig?.module?.vegNonVeg ?? false) && (Get.find<SplashController>().configModel?.toggleVegNonVeg ?? false))
                                 ? Image.asset(item != null && item!.veg == 0 ? Images.nonVegImage : Images.vegImage,
                                 height: 10, width: 10, fit: BoxFit.contain) : const SizedBox(),
 
-                            (Get.find<SplashController>().configModel!.moduleConfig!.module!.unit! && item != null && item!.unitType != null) ? Text(
+                            ((Get.find<SplashController>().configModel?.moduleConfig?.module?.unit ?? false) && item != null && item!.unitType != null) ? Text(
                               '(${ item!.unitType ?? ''})',
                               style: robotoRegular.copyWith(fontSize: Dimensions.fontSizeExtraSmall, color: Theme.of(context).hintColor),
                             ) : const SizedBox(),
 
-                            SizedBox(width: item!.isStoreHalalActive! && item!.isHalalItem! ? Dimensions.paddingSizeExtraSmall : 0),
+                            SizedBox(width: !isStore && (item!.isStoreHalalActive ?? false) && (item!.isHalalItem ?? false) ? Dimensions.paddingSizeExtraSmall : 0),
 
-                            !isStore && item!.isStoreHalalActive! && item!.isHalalItem!
+                            !isStore && (item!.isStoreHalalActive ?? false) && (item!.isHalalItem ?? false)
                                 ? const CustomAssetImageWidget(Images.halalTag, height: 13, width: 13) : const SizedBox(),
 
                             SizedBox(width: ResponsiveHelper.isDesktop(context) ? 20 : 20),
@@ -214,13 +229,13 @@ class ItemWidget extends StatelessWidget {
                           ) : const SizedBox(),
                           SizedBox(height: ((desktop || isStore) && (isStore ? store!.address != null : item!.storeName != null)) ? 3 : 3),
 
-                          !isStore && (item!.ratingCount! > 0) ? Row(children: [
+                          !isStore && ((item!.ratingCount ?? 0) > 0) ? Row(children: [
 
                             const Icon(Icons.star, size: 16, color: Colors.orange),
                             const SizedBox(width: Dimensions.paddingSizeExtraSmall),
 
                             Text(
-                              item!.avgRating!.toStringAsFixed(1),
+                              (item!.avgRating ?? 0).toStringAsFixed(1),
                               style: robotoMedium.copyWith(fontSize: Dimensions.fontSizeSmall),
                             ),
                             const SizedBox(width: Dimensions.paddingSizeExtraSmall),
@@ -232,15 +247,15 @@ class ItemWidget extends StatelessWidget {
 
                           ]) : const SizedBox(),
 
-                          SizedBox(height: (!isStore && desktop) || (!isStore && (item!.ratingCount! > 0)) ? 3 : 0),
+                          SizedBox(height: (!isStore && desktop) || (!isStore && ((item!.ratingCount ?? 0) > 0)) ? 3 : 0),
 
-                          isStore && (store != null && store!.ratingCount! > 0) ? Row(children: [
+                          isStore && (store != null && (store!.ratingCount ?? 0) > 0) ? Row(children: [
 
                             const Icon(Icons.star, size: 16, color: Colors.orange),
                             const SizedBox(width: Dimensions.paddingSizeExtraSmall),
 
                             Text(
-                              store!.avgRating!.toStringAsFixed(1),
+                              (store!.avgRating ?? 0).toStringAsFixed(1),
                               style: robotoMedium,
                             ),
                             const SizedBox(width: Dimensions.paddingSizeExtraSmall),
@@ -252,13 +267,13 @@ class ItemWidget extends StatelessWidget {
 
                           ]) : Row(children: [
                             Text(
-                              PriceConverter.convertPrice(item!.price, discount: discount, discountType: discountType),
+                              PriceConverter.convertPrice(startingPrice ?? item!.price ?? 0, discount: discount, discountType: discountType),
                               style: robotoMedium.copyWith(fontSize: Dimensions.fontSizeSmall), textDirection: TextDirection.ltr,
                             ),
-                            SizedBox(width: discount! > 0 ? Dimensions.paddingSizeExtraSmall : 0),
+                            SizedBox(width: (discount ?? 0) > 0 ? Dimensions.paddingSizeExtraSmall : 0),
 
-                            discount > 0 ? Text(
-                              PriceConverter.convertPrice(item!.price),
+                            (discount ?? 0) > 0 ? Text(
+                              PriceConverter.convertPrice(startingPrice ?? item!.price ?? 0),
                               style: robotoMedium.copyWith(
                                 fontSize: Dimensions.fontSizeExtraSmall,
                                 color: Theme.of(context).disabledColor,
@@ -272,7 +287,7 @@ class ItemWidget extends StatelessWidget {
 
                       Column(mainAxisAlignment: isStore ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween, children: [
                         const SizedBox(),
-                        CartCountView(item: item!, index: index),
+                        if (showQuickAdd) CartCountView(item: item!, index: index),
                       ]),
 
                     ]),

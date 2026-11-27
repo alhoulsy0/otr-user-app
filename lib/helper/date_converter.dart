@@ -135,25 +135,76 @@ class DateConverter {
     return DateFormat('HH:mm').format(time);
   }
 
-  static bool isAvailable(String? start, String? end, {DateTime? time}) {
-    DateTime currentTime;
-    if(time != null) {
-      currentTime = time;
-    }else {
-      currentTime = Get.find<SplashController>().currentTime;
+  static DateTime jordanNow() {
+    return DateTime.now().toUtc().add(const Duration(hours: 3));
+  }
+
+  static DateTime _parseTimeOfDay(String? raw, DateTime baseDate, {required bool isEnd}) {
+    if (raw == null || raw.trim().isEmpty) {
+      return isEnd
+          ? DateTime(baseDate.year, baseDate.month, baseDate.day, 23, 59, 59)
+          : DateTime(baseDate.year, baseDate.month, baseDate.day, 0, 0, 0);
     }
-    DateTime start0 = start != null ? DateFormat('HH:mm').parse(start) : DateTime(currentTime.year);
-    DateTime end0 = end != null ? DateFormat('HH:mm').parse(end) : DateTime(currentTime.year, currentTime.month, currentTime.day, 23, 59, 59);
-    DateTime startTime = DateTime(currentTime.year, currentTime.month, currentTime.day, start0.hour, start0.minute, start0.second);
-    DateTime endTime = DateTime(currentTime.year, currentTime.month, currentTime.day, end0.hour, end0.minute, end0.second);
-    if(endTime.isBefore(startTime)) {
-      if(currentTime.isBefore(startTime) && currentTime.isBefore(endTime)){
-        startTime = startTime.add(const Duration(days: -1));
-      }else {
-        endTime = endTime.add(const Duration(days: 1));
+    final String trimmed = raw.trim();
+    final List<String> parts = trimmed.split(':');
+    if (parts.length >= 2) {
+      final int? h = int.tryParse(parts[0]);
+      final int? m = int.tryParse(parts[1]);
+      if (h != null && m != null) {
+        int s = 0;
+        if (parts.length >= 3) {
+          s = int.tryParse(parts[2].split('.').first) ?? 0;
+        } else if (isEnd && h == 23 && m == 59) {
+          s = 59;
+        }
+        return DateTime(baseDate.year, baseDate.month, baseDate.day, h, m, s);
       }
     }
-    return currentTime.isAfter(startTime) && currentTime.isBefore(endTime);
+    try {
+      final DateTime parsed = DateFormat('HH:mm:ss').parse(trimmed);
+      return DateTime(baseDate.year, baseDate.month, baseDate.day, parsed.hour, parsed.minute, parsed.second);
+    } catch (_) {
+      try {
+        final DateTime parsed = DateFormat('HH:mm').parse(trimmed);
+        final int s = (isEnd && parsed.hour == 23 && parsed.minute == 59) ? 59 : 0;
+        return DateTime(baseDate.year, baseDate.month, baseDate.day, parsed.hour, parsed.minute, s);
+      } catch (_) {
+        return isEnd
+            ? DateTime(baseDate.year, baseDate.month, baseDate.day, 23, 59, 59)
+            : DateTime(baseDate.year, baseDate.month, baseDate.day, 0, 0, 0);
+      }
+    }
+  }
+
+  static bool isAvailable(String? start, String? end, {DateTime? time}) {
+    final DateTime rawNow = time ?? jordanNow();
+    final DateTime now = DateTime(
+      rawNow.year,
+      rawNow.month,
+      rawNow.day,
+      rawNow.hour,
+      rawNow.minute,
+      rawNow.second,
+    );
+
+    final String trimmedStart = (start ?? '').trim();
+    final String trimmedEnd = (end ?? '').trim();
+    if (trimmedStart.isNotEmpty && trimmedStart == trimmedEnd) {
+      return true;
+    }
+
+    final DateTime startTime = _parseTimeOfDay(start, now, isEnd: false);
+    final DateTime endTime = _parseTimeOfDay(end, now, isEnd: true);
+
+    if (startTime.isAtSameMomentAs(endTime)) {
+      return true;
+    }
+
+    if (endTime.isBefore(startTime)) {
+      return !now.isBefore(startTime) || !now.isAfter(endTime);
+    }
+
+    return !now.isBefore(startTime) && !now.isAfter(endTime);
   }
 
   static String _timeFormatter() {

@@ -1,30 +1,35 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility that Flutter provides. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets_new in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:sixam_mart/main.dart';
+import 'package:sixam_mart/features/item/domain/models/item_model.dart';
+import 'package:sixam_mart/util/app_constants.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp(languages: null, body: null));
+  group('AppConstants category IDs & Item.status serialization', () {
+    test('category constants match backend M1 IDs', () {
+      expect(AppConstants.importedLuxuryCategoryId, 144);
+      expect(AppConstants.importedLuxuryCategorySlug, 'imported-luxury');
+      expect(AppConstants.snacksChocolateCategoryId, 56);
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('Item.fromJson parses int and string status and serializes it', () {
+      final Item activeItem = Item.fromJson(<String, dynamic>{
+        'id': 101,
+        'name': 'Swiss Chocolate',
+        'price': 3.5,
+        'discount': 0,
+        'status': 1,
+      });
+      expect(activeItem.status, 1);
+      expect(activeItem.toJson()['status'], 1);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      final Item inactiveItem = Item.fromJson(<String, dynamic>{
+        'id': 102,
+        'name': 'Disabled Item',
+        'price': 2.0,
+        'discount': 0,
+        'status': '0',
+      });
+      expect(inactiveItem.status, 0);
+      expect(inactiveItem.toJson()['status'], 0);
+    });
   });
 }

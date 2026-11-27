@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/banner/domain/models/banner_model.dart';
@@ -33,14 +34,20 @@ class BannerRepository implements BannerRepositoryInterface {
 
   Future<BannerModel?> _getBannerList({required DataSourceEnum source}) async {
     BannerModel? bannerModel;
-    String cacheId = '${AppConstants.bannerUri}-${Get.find<SplashController>().module!.id!}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.bannerUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
         Response response = await apiClient.getData(AppConstants.bannerUri, moduleScoped: true);
         if (response.statusCode == 200) {
           bannerModel = BannerModel.fromJson(response.body);
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
 
         }
       case DataSourceEnum.local:

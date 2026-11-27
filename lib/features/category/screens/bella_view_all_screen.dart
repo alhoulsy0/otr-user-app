@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:shimmer_animation/shimmer_animation.dart';
+import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/common/widgets/bouncy_tap.dart';
 import 'package:sixam_mart/common/widgets/bella_product_card.dart';
 import 'package:sixam_mart/common/widgets/smart_quick_cart_dock.dart';
@@ -10,8 +11,9 @@ import 'package:sixam_mart/features/category/controllers/category_controller.dar
 import 'package:sixam_mart/features/category/domain/services/category_service_interface.dart';
 import 'package:sixam_mart/features/item/controllers/item_controller.dart';
 import 'package:sixam_mart/features/item/domain/models/item_model.dart';
+import 'package:sixam_mart/features/item/domain/services/item_service_interface.dart';
 import 'package:sixam_mart/features/language/controllers/language_controller.dart';
-import 'package:sixam_mart/helper/exclusive_products_helper.dart';
+import 'package:sixam_mart/helper/price_converter.dart';
 import 'package:sixam_mart/util/images.dart';
 import 'package:sixam_mart/util/styles.dart';
 
@@ -32,7 +34,7 @@ class BellaViewAllScreen extends StatefulWidget {
   const BellaViewAllScreen({
     super.key,
     required this.title,
-    required this.items,
+    this.items = const [],
     this.initialSearch,
     this.selectedCategoryId,
   });
@@ -53,14 +55,16 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
   List<Item> _items = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _hasError = false;
   int _currentPage = 1;
   bool _hasMore = true;
 
   @override
   void initState() {
     super.initState();
-    _currentQuery = widget.initialSearch ?? '';
-    _searchController = TextEditingController(text: _currentQuery);
+    final String initialSearchText = (widget.initialSearch ?? '').trim();
+    _currentQuery = initialSearchText.toLowerCase();
+    _searchController = TextEditingController(text: initialSearchText);
     _activeCategoryId = widget.selectedCategoryId ?? 0;
     _scrollController.addListener(_onScroll);
 
@@ -92,52 +96,14 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
     }
   }
 
-  List<Item> _getAllCatalogItems() {
-    final Map<int, Item> itemMap = {};
-
-    // 1. Items passed directly from widget caller
-    for (final it in widget.items) {
-      if (it.id != null) itemMap[it.id!] = it;
-    }
-
-    // 2. Add items from ItemController (popular, reviewed, discounted)
-    try {
-      final itemCtrl = Get.find<ItemController>();
-      if (itemCtrl.popularItemList != null) {
-        for (final it in itemCtrl.popularItemList!) {
-          if (it.id != null) itemMap.putIfAbsent(it.id!, () => it);
-        }
-      }
-      if (itemCtrl.reviewedItemList != null) {
-        for (final it in itemCtrl.reviewedItemList!) {
-          if (it.id != null) itemMap.putIfAbsent(it.id!, () => it);
-        }
-      }
-      if (itemCtrl.discountedItemList != null) {
-        for (final it in itemCtrl.discountedItemList!) {
-          if (it.id != null) itemMap.putIfAbsent(it.id!, () => it);
-        }
-      }
-    } catch (_) {}
-
-    // 3. Add luxury and exclusive collections
-    for (final it in ExclusiveProductsHelper.getImportedLuxuryProducts()) {
-      if (it.id != null) itemMap.putIfAbsent(it.id!, () => it);
-    }
-    for (final it in ExclusiveProductsHelper.getExclusiveEliteProducts()) {
-      if (it.id != null) itemMap.putIfAbsent(it.id!, () => it);
-    }
-
-    return itemMap.values.toList();
-  }
-
   void _onSelectCategory(int categoryId) {
-    if (_activeCategoryId == categoryId && !_isLoading) return;
+    if (_activeCategoryId == categoryId && !_isLoading && !_hasError) return;
     HapticFeedback.lightImpact();
 
     setState(() {
       _activeCategoryId = categoryId;
       _isLoading = true;
+      _hasError = false;
       _currentPage = 1;
       _hasMore = true;
       _items = [];
@@ -146,63 +112,71 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
     _fetchCategoryProducts(categoryId, 1);
   }
 
+  Future<ItemModel?> _fetchPage(int categoryId, int page) async {
+    if (categoryId == 0) {
+      return await Get.find<ItemServiceInterface>().getPopularItemList(
+        type: 'all',
+        source: DataSourceEnum.client,
+        offset: page,
+      );
+    }
+    return await Get.find<CategoryServiceInterface>().getCategoryItemList(
+      categoryId.toString(),
+      page,
+      'all',
+      limit: 20,
+    );
+  }
+
   Future<void> _fetchCategoryProducts(int categoryId, int page) async {
     final int targetId = categoryId;
 
     try {
-      final String requestCatId = targetId == 0 ? 'all' : targetId.toString();
-      final ItemModel? model = await Get.find<CategoryServiceInterface>().getCategoryItemList(requestCatId, page, 'all');
-      List<Item> fetched = model?.items ?? [];
-
-      // Fallback if API returned nothing
-      if (fetched.isEmpty) {
-        if (targetId == 0) {
-          fetched = _getAllCatalogItems();
-        } else if (widget.items.isNotEmpty) {
-          final matching = widget.items.where((it) => it.categoryId == targetId).toList();
-          if (matching.isNotEmpty) {
-            fetched = matching;
-          }
-        }
-      }
+      final ItemModel? model = await _fetchPage(targetId, page);
+      final List<Item> fetched = model?.items ?? [];
 
       if (mounted && _activeCategoryId == targetId) {
         setState(() {
           _items = fetched;
           _isLoading = false;
-          _hasMore = (model?.totalSize ?? fetched.length) > _items.length;
+          _hasError = model == null;
+          _hasMore = fetched.isNotEmpty && (model?.totalSize ?? 0) > _items.length;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted && _activeCategoryId == targetId) {
         setState(() {
-          _items = targetId == 0 ? _getAllCatalogItems() : [];
+          _items = [];
           _isLoading = false;
           _hasMore = false;
+          _hasError = true;
         });
       }
     }
   }
 
   Future<void> _loadMore() async {
-    _isLoadingMore = true;
+    if (_isLoadingMore || !_hasMore) return;
+    setState(() {
+      _isLoadingMore = true;
+    });
     final int nextPage = _currentPage + 1;
     final int currentCatId = _activeCategoryId;
 
     try {
-      final String requestCatId = currentCatId == 0 ? 'all' : currentCatId.toString();
-      final ItemModel? model = await Get.find<CategoryServiceInterface>().getCategoryItemList(
-        requestCatId,
-        nextPage,
-        'all',
-      );
+      final ItemModel? model = await _fetchPage(currentCatId, nextPage);
 
       if (mounted && _activeCategoryId == currentCatId) {
-        if (model != null && model.items != null && model.items!.isNotEmpty) {
+        final List<Item>? incoming = model?.items;
+        if (model != null && incoming != null && incoming.isNotEmpty) {
+          final Set<int> existingIds = _items.map((e) => e.id).whereType<int>().toSet();
+          final List<Item> uniqueIncoming = incoming
+              .where((e) => e.id == null || !existingIds.contains(e.id))
+              .toList();
           setState(() {
             _currentPage = nextPage;
-            _items.addAll(model.items!);
-            _hasMore = (model.totalSize ?? 0) > _items.length;
+            _items.addAll(uniqueIncoming);
+            _hasMore = uniqueIncoming.isNotEmpty && (model.totalSize ?? 0) > _items.length;
           });
         } else {
           setState(() {
@@ -211,7 +185,7 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
         }
       }
     } catch (_) {
-      // Ignore load more failure
+      // Ignore load more failure; user can scroll again to retry
     } finally {
       if (mounted) {
         setState(() {
@@ -293,10 +267,23 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
     }
 
     // Apply Sorting
-    if (_activeSort == 'low_high') {
-      result.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
-    } else if (_activeSort == 'high_low') {
-      result.sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
+    if (_activeSort == 'low_high' || _activeSort == 'high_low') {
+      double effectivePrice(Item item) {
+        final double startingPrice = Get.isRegistered<ItemController>()
+            ? (Get.find<ItemController>().getStartingPrice(item) ?? item.price ?? 0)
+            : (item.price ?? 0);
+        return PriceConverter.convertWithDiscount(
+              startingPrice,
+              item.discount ?? 0,
+              item.discountType,
+            ) ??
+            startingPrice;
+      }
+      if (_activeSort == 'low_high') {
+        result.sort((a, b) => effectivePrice(a).compareTo(effectivePrice(b)));
+      } else {
+        result.sort((a, b) => effectivePrice(b).compareTo(effectivePrice(a)));
+      }
     }
 
     return result;
@@ -616,16 +603,6 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
           ));
         }
       }
-    } else {
-      categories.addAll(const [
-        _FilterCapsule(id: 1, name: 'خضار وفواكه', icon: Icons.eco_rounded),
-        _FilterCapsule(id: 2, name: 'ألبان وأجبان', icon: Icons.egg_rounded),
-        _FilterCapsule(id: 3, name: 'لحوم وأسماك', icon: Icons.restaurant_rounded),
-        _FilterCapsule(id: 4, name: 'مخبوزات', icon: Icons.bakery_dining_rounded),
-        _FilterCapsule(id: 5, name: 'مشروبات وعصائر', icon: Icons.local_drink_rounded),
-        _FilterCapsule(id: 6, name: 'سناكات وشيبس', icon: Icons.cookie_rounded),
-        _FilterCapsule(id: 16, name: 'منتجات فاخرة', icon: Icons.public_rounded),
-      ]);
     }
 
     return Container(
@@ -724,7 +701,7 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            'No Products Found'.tr,
+            _hasError ? 'something_went_wrong'.tr : 'No Products Found'.tr,
             style: robotoBold.copyWith(
               fontSize: 18,
               fontWeight: FontWeight.w800,
@@ -733,7 +710,7 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'no_items_in_category_found'.tr,
+            _hasError ? 'connection_to_api_server_failed'.tr : 'no_items_in_category_found'.tr,
             textAlign: TextAlign.center,
             style: robotoRegular.copyWith(
               fontSize: 13,
@@ -744,9 +721,17 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
           const SizedBox(height: 24),
           BouncyTap(
             onTap: () {
-              _searchController.clear();
-              _currentQuery = '';
-              _onSelectCategory(0);
+              if (_hasError) {
+                setState(() {
+                  _isLoading = true;
+                  _hasError = false;
+                });
+                _fetchCategoryProducts(_activeCategoryId, 1);
+              } else {
+                _searchController.clear();
+                _currentQuery = '';
+                _onSelectCategory(0);
+              }
             },
             shrinkScale: 0.94,
             child: Container(
@@ -763,7 +748,7 @@ class _BellaViewAllScreenState extends State<BellaViewAllScreen> {
                 ],
               ),
               child: Text(
-                'Explore All Products'.tr,
+                _hasError ? 'retry'.tr : 'Explore All Products'.tr,
                 style: robotoBold.copyWith(
                   color: Colors.white,
                   fontSize: 13.5,

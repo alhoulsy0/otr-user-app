@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/common/models/response_model.dart';
@@ -19,13 +20,20 @@ class ReelsRepository implements ReelsRepositoryInterface {
   Future<ReelListModel?> getList({int? offset, int? limit, DataSourceEnum source = DataSourceEnum.local}) async {
     final int effectiveOffset = offset ?? 1;
     final int effectiveLimit = limit ?? 10;
-    final String cacheId = '${AppConstants.reelListUri}?offset=$effectiveOffset&limit=$effectiveLimit-${Get.find<SplashController>().module?.id ?? 0}';
 
     final Map<String, dynamic> query = <String, dynamic>{
       'offset': effectiveOffset.toString(),
       'limit': effectiveLimit.toString(),
       if(!AuthHelper.isLoggedIn()) 'guest_id': AuthHelper.getGuestId(),
     };
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.reelListUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+      params: query,
+    );
     final String uri = Uri.parse(AppConstants.reelListUri).replace(queryParameters: query).toString();
 
     switch(source) {

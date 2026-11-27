@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:sixam_mart/api/api_client.dart';
+import 'package:sixam_mart/api/cache_envelope_helper.dart';
 import 'package:sixam_mart/api/local_client.dart';
 import 'package:sixam_mart/common/enums/data_source_enum.dart';
 import 'package:sixam_mart/features/home/domain/models/advertisement_model.dart';
@@ -16,7 +17,13 @@ class AdvertisementRepository implements AdvertisementRepositoryInterface {
   @override
   Future<List<AdvertisementModel>?> getList({int? offset, DataSourceEnum source = DataSourceEnum.client}) async {
     List<AdvertisementModel>? advertisementList;
-    String cacheId = '${AppConstants.advertisementListUri}-${Get.find<SplashController>().module?.id??0}';
+    final Map<String, String> headers = apiClient.getHeader();
+    final String cacheId = buildCacheKey(
+      AppConstants.advertisementListUri,
+      zoneId: headers[AppConstants.zoneId],
+      languageCode: headers[AppConstants.localizationKey],
+      moduleId: Get.find<SplashController>().module?.id ?? 0,
+    );
 
     switch(source) {
       case DataSourceEnum.client:
@@ -26,7 +33,7 @@ class AdvertisementRepository implements AdvertisementRepositoryInterface {
           response.body.forEach((data) {
             advertisementList?.add(AdvertisementModel.fromJson(data));
           });
-          LocalClient.organize(source, cacheId, jsonEncode(response.body), apiClient.getHeader());
+          await LocalClient.organize(source, cacheId, jsonEncode(response.body), headers);
         }
 
       case DataSourceEnum.local:
